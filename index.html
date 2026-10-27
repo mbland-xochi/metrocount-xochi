@@ -278,7 +278,7 @@ const TIPOS = {
   'Instalación':            'Pone el equipo "En uso", actualiza ubicación y mangueras A y B, reinicia el conteo de cambios de cinta.',
   'Retiro':                 'Pasa el equipo a "En bodega".',
   'Descarga de datos':      'Actualiza la fecha de última descarga.',
-  'Cambio de cinta':        'Suma 1 al conteo de cambios de cinta. Indica abajo la cinta asfáltica utilizada.',
+  'Cambio de cinta':        'Suma 1 al conteo de cambios de cinta. No descuenta cinta asfáltica del inventario.',
   'Cambio de manguera':     'Cambia la Manguera A, la B o ambas. Si cambian ambas, reinicia el conteo de cinta.',
   'Cambio de batería':      'Actualiza la batería y registra mantenimiento.',
   'Inspección en campo':    'Registro de revisión visual (mangueras, clavos, figure 8, tapones).',
@@ -300,7 +300,7 @@ function defaultState(){
       {id:uid(), nombre:'Clavos',    unidad:'unidades', nuevos:0, usados:0, min:24},
       {id:uid(), nombre:'Figure 8',  unidad:'unidades', nuevos:0, usados:0, min:12},
       {id:uid(), nombre:'Tapones',   unidad:'unidades', nuevos:0, usados:0, min:12},
-      {id:uid(), nombre:'Cinta asfáltica', unidad:'rollos', nuevos:0, usados:0, min:1},
+      {id:uid(), nombre:'Cinta asfáltica', unidad:'rollo', nuevos:0, usados:0, min:1, tipo:'existencia'},
     ],
     bitacora: [],
     compras: [],
@@ -316,6 +316,7 @@ function migrate(s){
   (s.devices||[]).forEach(d=>{ if(d.setMangueras!==undefined){ if(!d.mangueraA) d.mangueraA=d.setMangueras; delete d.setMangueras; } if(d.mangueraA===undefined) d.mangueraA=''; if(d.mangueraB===undefined) d.mangueraB=''; });
   (s.bitacora||[]).forEach(l=>{ if(l.tipo==='Cambio de mangueras') l.tipo='Cambio de manguera'; });
   if(s.inventario && !s.inventario.some(i=>/cinta/i.test(i.nombre))) s.inventario.push({id:uid(), nombre:'Cinta asfáltica', unidad:'rollos', nuevos:0, usados:0, min:1});
+  (s.inventario||[]).forEach(i=>{ if(/cinta/i.test(i.nombre)){ i.tipo='existencia'; i.nuevos = +i.nuevos>0 ? 1 : 0; i.usados=0; i.min=1; } });
   if(s.config && !s.config.minsV2){
     const M={'mangueras':2,'clavos':24,'figure 8':12,'tapones':12,'cinta asfáltica':1};
     (s.inventario||[]).forEach(i=>{ const k=String(i.nombre).toLowerCase().trim(); if(M[k]!==undefined) i.min=M[k]; });
@@ -442,6 +443,18 @@ function renderDevices(){
 
 function renderInv(){
   $('invGrid').innerHTML = S.inventario.map(i => {
+    if(i.tipo==='existencia'){
+      const hay = +i.nuevos > 0;
+      return `<div class="card inv-item">
+      <h3>${esc(i.nombre)} ${hay?'<span class="pill p-ok">Hay existencia</span>':'<span class="pill p-bad">Sin existencia</span>'}</h3>
+      <div class="counter"><div><div class="lbl">Existencia</div><div class="hint">Control sí / no (no se descuenta por uso)</div></div>
+        <div class="ctrl"><span class="num" style="font-size:16px">${hay?'Sí':'No'}</span></div></div>
+      <div class="actions">
+        <button class="btn ${hay?'':'primary'}" onclick="toggleExist('${i.id}')">${hay?'Marcar sin existencia':'Marcar con existencia'}</button>
+        <button class="btn" onclick="openBuy(null,'${esc(i.nombre)}',1)">Agregar a compras</button>
+      </div>
+    </div>`;
+    }
     const low = +i.nuevos < +i.min;
     return `<div class="card inv-item">
       <h3>${esc(i.nombre)} ${low?'<span class="pill p-bad">Bajo mínimo</span>':'<span class="pill p-ok">OK</span>'}</h3>
@@ -519,11 +532,10 @@ function saveDev(e){
 function openLog(devId, tipo){
   $('lDev').innerHTML = S.devices.map(d=>`<option value="${d.id}">${esc(d.nombre)}</option>`).join('');
   $('lTipo').innerHTML = Object.keys(TIPOS).map(t=>`<option>${t}</option>`).join('');
-  $('lMat').innerHTML = '<option value="">— Ninguno —</option>' + S.inventario.map(i=>`<option value="${i.id}">${esc(i.nombre)}</option>`).join('');
+  $('lMat').innerHTML = '<option value="">— Ninguno —</option>' + S.inventario.filter(i=>i.tipo!=='existencia').map(i=>`<option value="${i.id}">${esc(i.nombre)}</option>`).join('');
   $('lFecha').value=today(); if(devId) $('lDev').value=devId; if(tipo) $('lTipo').value=tipo;
   ['lUbic','lMA','lMB','lBat','lNotas'].forEach(i=>$(i).value=''); $('lLado').value='A'; $('lCant').value=0; $('lRet').value=0;
   try{ $('lResp').value = localStorage.getItem('xochi_mc_resp')||''; }catch(e){}
-  if(tipo==='Cambio de cinta'){ const c=S.inventario.find(i=>/cinta/i.test(i.nombre)); if(c){ $('lMat').value=c.id; $('lCant').value=1; } }
   logHint(); $('dlgLog').showModal();
 }
 function logHint(){
@@ -593,6 +605,7 @@ function delLog(id){
 }
 
 /* ============ INVENTORY ============ */
+function toggleExist(id){ const i=S.inventario.find(x=>x.id===id); i.nuevos = +i.nuevos>0 ? 0 : 1; persist(); }
 function adj(id, k, n){ const i=S.inventario.find(x=>x.id===id); i[k]=Math.max(0,(+i[k]||0)+n); persist(); }
 function openItem(id){
   const i = id ? S.inventario.find(x=>x.id===id) : {id:'',nombre:'',unidad:'unidades',nuevos:0,usados:0,min:0};
@@ -638,7 +651,7 @@ function receive(id){
 function addToStock(b){
   b.fechaRecibida = today();
   const it = S.inventario.find(i=>i.nombre.toLowerCase()===b.item.toLowerCase());
-  if(it) it.nuevos = (+it.nuevos||0) + (+b.cantidad);
+  if(it) it.nuevos = it.tipo==='existencia' ? 1 : (+it.nuevos||0) + (+b.cantidad);
   else if(confirm(`"${b.item}" no existe en inventario. ¿Crearlo con ${b.cantidad} nuevos?`))
     S.inventario.push({id:uid(), nombre:b.item, unidad:'unidades', nuevos:+b.cantidad, usados:0, min:0});
 }
