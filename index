@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Control MetroCount · Xochi</title>
+<style>
+  :root{
+    --bg:#f6f5f1; --card:#ffffff; --ink:#1d1d1b; --muted:#6b6a64; --line:#e4e1d8;
+    --gold:#b8892b; --gold-soft:#f5ecd8; --ok:#2f7d4f; --ok-soft:#e3f2e8;
+    --warn:#b7791f; --warn-soft:#fdf1dc; --bad:#b33a3a; --bad-soft:#f9e3e3;
+    --info:#2b5f8a; --info-soft:#e2edf6; --radius:12px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Segoe UI",system-ui,-apple-system,Roboto,sans-serif;background:var(--bg);color:var(--ink);font-size:15px}
+  header{background:var(--card);border-bottom:3px solid var(--gold);padding:14px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:19px;margin:0;font-weight:650}
+  header h1 span{color:var(--gold)}
+  .sync{margin-left:auto;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
+  .dot{width:8px;height:8px;border-radius:50%;background:#aaa}
+  .dot.ok{background:var(--ok)} .dot.busy{background:var(--warn)} .dot.err{background:var(--bad)}
+  nav{display:flex;gap:4px;padding:0 20px;background:var(--card);border-bottom:1px solid var(--line);overflow-x:auto}
+  nav button{border:0;background:none;padding:12px 14px;font-size:14px;color:var(--muted);cursor:pointer;border-bottom:3px solid transparent;white-space:nowrap}
+  nav button.active{color:var(--ink);border-bottom-color:var(--gold);font-weight:600}
+  nav .badge{background:var(--bad);color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px}
+  main{max-width:1200px;margin:0 auto;padding:20px}
+  section{display:none} section.active{display:block}
+  h2{font-size:17px;margin:4px 0 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  h2 .spacer{flex:1}
+  .grid{display:grid;gap:14px}
+  .g3{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+  .g4{grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px}
+  .dev-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+  .dev-head h3{margin:0;font-size:16px}
+  .pill{font-size:12px;padding:3px 10px;border-radius:20px;font-weight:600;white-space:nowrap}
+  .p-ok{background:var(--ok-soft);color:var(--ok)} .p-warn{background:var(--warn-soft);color:var(--warn)}
+  .p-bad{background:var(--bad-soft);color:var(--bad)} .p-info{background:var(--info-soft);color:var(--info)}
+  .p-gray{background:#eee;color:#555}
+  dl{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;margin:0;font-size:14px}
+  dt{color:var(--muted)} dd{margin:0;font-weight:500}
+  .alerts{margin-top:10px;display:flex;flex-direction:column;gap:6px}
+  .alert{font-size:13px;padding:6px 10px;border-radius:8px}
+  .actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+  button.btn{border:1px solid var(--line);background:var(--card);padding:7px 12px;border-radius:8px;cursor:pointer;font-size:13px;color:var(--ink)}
+  button.btn:hover{border-color:var(--gold)}
+  button.primary{background:var(--gold);border-color:var(--gold);color:#fff;font-weight:600}
+  button.primary:hover{filter:brightness(.95)}
+  button.danger{color:var(--bad)}
+  button.mini{padding:2px 9px;font-size:15px;line-height:1.2}
+  .inv-item h3{margin:0 0 10px;font-size:15px;display:flex;justify-content:space-between;align-items:center}
+  .counter{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-top:1px solid var(--line)}
+  .counter .num{font-size:22px;font-weight:650;min-width:44px;text-align:center}
+  .counter .lbl{font-size:13px;color:var(--muted)}
+  .counter .ctrl{display:flex;align-items:center;gap:6px}
+  table{width:100%;border-collapse:collapse;font-size:14px;background:var(--card)}
+  th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+  th{font-size:12px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);background:#faf9f5}
+  .table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--radius)}
+  .filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+  input,select,textarea{font:inherit;padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);width:100%}
+  textarea{min-height:64px;resize:vertical}
+  .filters select,.filters input{width:auto}
+  label{font-size:13px;color:var(--muted);display:block;margin-bottom:4px}
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .form-grid .full{grid-column:1/-1}
+  dialog{border:0;border-radius:14px;padding:0;max-width:560px;width:calc(100% - 32px);box-shadow:0 20px 60px rgba(0,0,0,.25)}
+  dialog::backdrop{background:rgba(20,20,20,.45)}
+  .dlg-head{padding:14px 18px;border-bottom:1px solid var(--line);font-weight:650;display:flex;justify-content:space-between;align-items:center}
+  .dlg-body{padding:18px;max-height:70vh;overflow-y:auto}
+  .dlg-foot{padding:12px 18px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px}
+  .hint{font-size:12px;color:var(--muted);margin-top:4px}
+  .empty{padding:30px;text-align:center;color:var(--muted)}
+  .kpi{font-size:26px;font-weight:650} .kpi-l{font-size:13px;color:var(--muted)}
+  .section-gap{height:22px}
+  fieldset{border:1px dashed var(--line);border-radius:10px;padding:10px 12px;margin:0}
+  legend{font-size:12px;color:var(--muted);padding:0 6px}
+  @media (max-width:600px){.form-grid{grid-template-columns:1fr} main{padding:14px}}
+  @media print{nav,header .sync,.actions,button{display:none!important} section{display:block!important;page-break-after:always}}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Control <span>MetroCount</span> · Xochi</h1>
+  <div class="sync"><span class="dot" id="syncDot"></span><span id="syncTxt">Local</span></div>
+</header>
+
+<nav id="tabs">
+  <button data-tab="panel" class="active">Panel de equipos</button>
+  <button data-tab="inventario">Inventario <span class="badge" id="bInv" hidden></span></button>
+  <button data-tab="bitacora">Bitácora O&amp;M</button>
+  <button data-tab="compras">Compras pendientes <span class="badge" id="bCom" hidden></span></button>
+  <button data-tab="ajustes">Ajustes</button>
+</nav>
+
+<main>
+  <!-- PANEL -->
+  <section id="panel" class="active">
+    <div class="grid g4" id="kpis"></div>
+    <div class="section-gap"></div>
+    <h2>Equipos <span class="spacer"></span><button class="btn primary" onclick="openLog()">+ Registrar actividad</button></h2>
+    <div class="grid g3" id="devices"></div>
+  </section>
+
+  <!-- INVENTARIO -->
+  <section id="inventario">
+    <h2>Inventario de accesorios <span class="spacer"></span>
+      <button class="btn" onclick="openItem()">+ Nuevo artículo</button>
+    </h2>
+    <div class="grid g4" id="invGrid"></div>
+  </section>
+
+  <!-- BITACORA -->
+  <section id="bitacora">
+    <h2>Bitácora de operación y mantenimiento <span class="spacer"></span>
+      <button class="btn" onclick="exportCSV('bitacora')">Exportar CSV</button>
+      <button class="btn primary" onclick="openLog()">+ Registrar actividad</button>
+    </h2>
+    <div class="filters">
+      <select id="fDev" onchange="renderLog()"></select>
+      <select id="fTipo" onchange="renderLog()"></select>
+      <input type="month" id="fMes" onchange="renderLog()">
+    </div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Fecha</th><th>Equipo</th><th>Actividad</th><th>Ubicación</th><th>Responsable</th><th>Material</th><th>Notas</th><th></th></tr></thead>
+      <tbody id="logBody"></tbody>
+    </table></div>
+  </section>
+
+  <!-- COMPRAS -->
+  <section id="compras">
+    <h2>Compras <span class="spacer"></span>
+      <button class="btn" onclick="exportCSV('compras')">Exportar CSV</button>
+      <button class="btn primary" onclick="openBuy()">+ Agregar a compras</button>
+    </h2>
+    <div class="filters">
+      <select id="fEst" onchange="renderBuy()">
+        <option value="abiertas">Abiertas (no recibidas)</option>
+        <option value="">Todas</option>
+        <option>Pendiente</option><option>Solicitada</option><option>Aprobada</option><option>En camino</option><option>Recibida</option><option>Cancelada</option>
+      </select>
+    </div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Artículo</th><th>Cant.</th><th>Prioridad</th><th>Estado</th><th>Proveedor</th><th>Solicitado</th><th>Notas</th><th></th></tr></thead>
+      <tbody id="buyBody"></tbody>
+    </table></div>
+  </section>
+
+  <!-- AJUSTES -->
+  <section id="ajustes">
+    <h2>Ajustes y respaldo</h2>
+    <div class="grid g3">
+      <div class="card">
+        <h3 style="margin-top:0;font-size:15px">Alertas</h3>
+        <label>Días máximos sin descarga de datos</label>
+        <input type="number" id="cfgDesc" min="1">
+        <div class="section-gap" style="height:10px"></div>
+        <label>Cambios de cinta antes de revisar mangueras</label>
+        <input type="number" id="cfgCinta" min="1">
+        <div class="section-gap" style="height:10px"></div>
+        <label>Días entre mantenimientos preventivos</label>
+        <input type="number" id="cfgMant" min="1">
+        <div class="actions"><button class="btn primary" onclick="saveCfg()">Guardar</button></div>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0;font-size:15px">Sincronización con Google Sheets</h3>
+        <label>URL del Web App (Apps Script)</label>
+        <input type="url" id="cfgApi" placeholder="https://script.google.com/macros/s/.../exec">
+        <p class="hint">Vacío = solo se guarda en este navegador.</p>
+        <div class="actions">
+          <button class="btn primary" onclick="saveApi()">Guardar y conectar</button>
+          <button class="btn" onclick="pull()">Recargar desde Sheets</button>
+        </div>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0;font-size:15px">Respaldo</h3>
+        <p class="hint">Descarga o restaura toda la información en JSON.</p>
+        <div class="actions">
+          <button class="btn" onclick="exportJSON()">Descargar respaldo</button>
+          <button class="btn" onclick="document.getElementById('imp').click()">Restaurar</button>
+          <input type="file" id="imp" accept=".json" hidden onchange="importJSON(this)">
+        </div>
+        <div class="actions"><button class="btn" onclick="window.print()">Imprimir reporte</button></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- DIALOGS -->
+<dialog id="dlgDev"><form method="dialog" onsubmit="return saveDev(event)">
+  <div class="dlg-head"><span id="devTitle">Editar equipo</span><button class="btn mini" value="cancel" formnovalidate>×</button></div>
+  <div class="dlg-body form-grid">
+    <input type="hidden" id="dId">
+    <div><label>Nombre</label><input id="dNombre" required></div>
+    <div><label>No. de serie</label><input id="dSerie"></div>
+    <div><label>Modelo</label><input id="dModelo" placeholder="RoadPod VT"></div>
+    <div><label>Estado</label><select id="dEstado"><option>En uso</option><option>En bodega</option><option>En mantenimiento</option><option>Fuera de servicio</option></select></div>
+    <div class="full"><label>Ubicación</label><input id="dUbic" placeholder="KM 152 CA-2, sentido ..."></div>
+    <div><label>Set de mangueras #</label><input id="dSet"></div>
+    <div><label>Cambios de cinta (instalación actual)</label><input type="number" id="dCinta" min="0"></div>
+    <div><label>Fecha de instalación</label><input type="date" id="dInst"></div>
+    <div><label>Última descarga de datos</label><input type="date" id="dDesc"></div>
+    <div><label>Batería (%)</label><input type="number" id="dBat" min="0" max="100"></div>
+    <div><label>Último mantenimiento preventivo</label><input type="date" id="dMant"></div>
+    <div class="full"><label>Notas</label><textarea id="dNotas"></textarea></div>
+  </div>
+  <div class="dlg-foot"><button class="btn" value="cancel" formnovalidate>Cancelar</button><button class="btn primary" value="ok">Guardar</button></div>
+</form></dialog>
+
+<dialog id="dlgLog"><form method="dialog" onsubmit="return saveLog(event)">
+  <div class="dlg-head"><span>Registrar actividad</span><button class="btn mini" value="cancel" formnovalidate>×</button></div>
+  <div class="dlg-body form-grid">
+    <div><label>Fecha</label><input type="date" id="lFecha" required></div>
+    <div><label>Equipo</label><select id="lDev" required></select></div>
+    <div class="full"><label>Actividad</label><select id="lTipo" required onchange="logHint()"></select>
+      <div class="hint" id="lHint"></div></div>
+    <div class="full" id="lUbicWrap"><label>Ubicación</label><input id="lUbic" placeholder="KM / sentido / carril"></div>
+    <div id="lSetWrap"><label>Set de mangueras #</label><input id="lSet"></div>
+    <div id="lBatWrap"><label>Batería (%)</label><input type="number" id="lBat" min="0" max="100"></div>
+    <div class="full"><label>Responsable</label><input id="lResp" required></div>
+    <fieldset class="full"><legend>Material utilizado (descuenta del inventario)</legend>
+      <div class="form-grid">
+        <div><label>Artículo</label><select id="lMat"></select></div>
+        <div><label>Cantidad</label><input type="number" id="lCant" min="0" value="0"></div>
+        <div><label>Condición</label><select id="lCond"><option value="nuevos">Nuevo</option><option value="usados">Usado</option></select></div>
+        <div><label>Material retirado (regresa como usado)</label><input type="number" id="lRet" min="0" value="0"></div>
+      </div>
+    </fieldset>
+    <div class="full"><label>Notas / hallazgos</label><textarea id="lNotas"></textarea></div>
+  </div>
+  <div class="dlg-foot"><button class="btn" value="cancel" formnovalidate>Cancelar</button><button class="btn primary" value="ok">Registrar</button></div>
+</form></dialog>
+
+<dialog id="dlgItem"><form method="dialog" onsubmit="return saveItem(event)">
+  <div class="dlg-head"><span>Artículo de inventario</span><button class="btn mini" value="cancel" formnovalidate>×</button></div>
+  <div class="dlg-body form-grid">
+    <input type="hidden" id="iId">
+    <div class="full"><label>Nombre</label><input id="iNombre" required></div>
+    <div><label>Unidad</label><input id="iUnidad" placeholder="unidades, m, rollos"></div>
+    <div><label>Stock mínimo (nuevos)</label><input type="number" id="iMin" min="0"></div>
+    <div><label>Nuevos</label><input type="number" id="iNuevos" min="0"></div>
+    <div><label>Usados</label><input type="number" id="iUsados" min="0"></div>
+  </div>
+  <div class="dlg-foot"><button class="btn danger" type="button" id="iDel" onclick="delItem()">Eliminar</button><span style="flex:1"></span><button class="btn" value="cancel" formnovalidate>Cancelar</button><button class="btn primary" value="ok">Guardar</button></div>
+</form></dialog>
+
+<dialog id="dlgBuy"><form method="dialog" onsubmit="return saveBuy(event)">
+  <div class="dlg-head"><span>Compra</span><button class="btn mini" value="cancel" formnovalidate>×</button></div>
+  <div class="dlg-body form-grid">
+    <input type="hidden" id="bId">
+    <div class="full"><label>Artículo</label><input id="bItem" list="itemList" required><datalist id="itemList"></datalist>
+      <div class="hint">Si coincide con un artículo del inventario, al marcarla como "Recibida" se suma a nuevos.</div></div>
+    <div><label>Cantidad</label><input type="number" id="bCant" min="1" required></div>
+    <div><label>Prioridad</label><select id="bPrio"><option>Alta</option><option selected>Media</option><option>Baja</option></select></div>
+    <div><label>Estado</label><select id="bEst"><option>Pendiente</option><option>Solicitada</option><option>Aprobada</option><option>En camino</option><option>Recibida</option><option>Cancelada</option></select></div>
+    <div><label>Fecha de solicitud</label><input type="date" id="bFecha"></div>
+    <div><label>Proveedor</label><input id="bProv"></div>
+    <div><label>No. requisición / OC</label><input id="bOC"></div>
+    <div class="full"><label>Notas</label><textarea id="bNotas"></textarea></div>
+  </div>
+  <div class="dlg-foot"><button class="btn danger" type="button" id="bDel" onclick="delBuy()">Eliminar</button><span style="flex:1"></span><button class="btn" value="cancel" formnovalidate>Cancelar</button><button class="btn primary" value="ok">Guardar</button></div>
+</form></dialog>
+
+<script>
+/* ============ CONFIG ============ */
+const LS_KEY = 'xochi_metrocount_v1';
+const LS_API = 'xochi_metrocount_api';
+const TIPOS = {
+  'Instalación':            'Pone el equipo "En uso", actualiza ubicación y set de mangueras, reinicia el conteo de cambios de cinta.',
+  'Retiro':                 'Pasa el equipo a "En bodega".',
+  'Descarga de datos':      'Actualiza la fecha de última descarga.',
+  'Cambio de cinta':        'Suma 1 al conteo de cambios de cinta.',
+  'Cambio de mangueras':    'Actualiza el set de mangueras y reinicia el conteo de cinta.',
+  'Cambio de batería':      'Actualiza la batería y registra mantenimiento.',
+  'Inspección en campo':    'Registro de revisión visual (mangueras, clavos, figure 8, tapones).',
+  'Mantenimiento preventivo':'Actualiza la fecha de último mantenimiento.',
+  'Reparación / falla':     'Pasa el equipo a "En mantenimiento".',
+  'Verificación de conteo': 'Comparación contra conteo manual o video (ISO 9001 §7.1.5).',
+  'Otro':                   ''
+};
+
+/* ============ STATE ============ */
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+const today = () => new Date().toISOString().slice(0,10);
+
+function defaultState(){
+  return {
+    devices: [1,2,3].map(n => ({id:'mc'+n, nombre:'MetroCount #'+n, serie:'', modelo:'', estado:'En bodega', ubicacion:'', setMangueras:'', cambiosCinta:0, fechaInstalacion:'', ultimaDescarga:'', bateria:'', ultimoMant:'', notas:''})),
+    inventario: [
+      {id:uid(), nombre:'Mangueras', unidad:'unidades', nuevos:0, usados:0, min:2},
+      {id:uid(), nombre:'Clavos',    unidad:'unidades', nuevos:0, usados:0, min:20},
+      {id:uid(), nombre:'Figure 8',  unidad:'unidades', nuevos:0, usados:0, min:6},
+      {id:uid(), nombre:'Tapones',   unidad:'unidades', nuevos:0, usados:0, min:6},
+    ],
+    bitacora: [],
+    compras: [],
+    config: {diasDescarga:7, cintaMax:5, diasMant:90},
+    updated: new Date().toISOString()
+  };
+}
+let S;
+try { S = JSON.parse(localStorage.getItem(LS_KEY)) || defaultState(); } catch(e){ S = defaultState(); }
+let API = ''; try { API = localStorage.getItem(LS_API) || ''; } catch(e){}
+
+function persist(){
+  S.updated = new Date().toISOString();
+  try { localStorage.setItem(LS_KEY, JSON.stringify(S)); } catch(e){}
+  push();
+  renderAll();
+}
+
+/* ============ SYNC (Apps Script) ============ */
+let pushTimer;
+function setSync(cls, txt){ document.getElementById('syncDot').className='dot '+cls; document.getElementById('syncTxt').textContent=txt; }
+function push(){
+  if(!API) return;
+  clearTimeout(pushTimer);
+  setSync('busy','Guardando…');
+  pushTimer = setTimeout(async () => {
+    try{
+      const r = await fetch(API, {method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify({action:'saveAll', data:S})});
+      const j = await r.json();
+      if(!j.ok) throw new Error(j.error||'Error');
+      setSync('ok','Sincronizado '+new Date().toLocaleTimeString('es-GT',{hour:'2-digit',minute:'2-digit'}));
+    }catch(e){ setSync('err','Sin conexión (guardado local)'); }
+  }, 700);
+}
+async function pull(){
+  if(!API){ setSync('','Local'); return; }
+  setSync('busy','Cargando…');
+  try{
+    const r = await fetch(API+'?action=getAll');
+    const j = await r.json();
+    if(j.ok && j.data && j.data.devices && j.data.devices.length){
+      S = Object.assign(defaultState(), j.data);
+      try { localStorage.setItem(LS_KEY, JSON.stringify(S)); } catch(e){}
+      renderAll();
+      setSync('ok','Sincronizado');
+    } else if(j.ok){ push(); }
+    else throw new Error(j.error);
+  }catch(e){ setSync('err','Sin conexión (datos locales)'); }
+}
+
+/* ============ HELPERS ============ */
+const $ = id => document.getElementById(id);
+const esc = s => String(s??'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmt = d => d ? new Date(d+'T12:00:00').toLocaleDateString('es-GT',{day:'2-digit',month:'short',year:'numeric'}) : '—';
+const daysSince = d => d ? Math.floor((Date.now() - new Date(d+'T12:00:00')) / 86400000) : null;
+const devName = id => (S.devices.find(d=>d.id===id)||{}).nombre || id;
+const estadoPill = e => ({'En uso':'p-ok','En bodega':'p-gray','En mantenimiento':'p-warn','Fuera de servicio':'p-bad'}[e]||'p-gray');
+
+function deviceAlerts(d){
+  const a=[], c=S.config;
+  if(d.estado==='En uso'){
+    const ds = daysSince(d.ultimaDescarga);
+    if(ds===null) a.push(['p-warn','Sin descarga de datos registrada']);
+    else if(ds > c.diasDescarga) a.push(['p-bad',`${ds} días sin descargar datos`]);
+    if(+d.cambiosCinta >= c.cintaMax) a.push(['p-warn',`${d.cambiosCinta} cambios de cinta: revisar estado de mangueras`]);
+  }
+  if(d.bateria!=='' && +d.bateria <= 20) a.push(['p-bad',`Batería baja (${d.bateria}%)`]);
+  const dm = daysSince(d.ultimoMant);
+  if(dm===null) a.push(['p-info','Sin mantenimiento preventivo registrado']);
+  else if(dm > c.diasMant) a.push(['p-warn',`Mantenimiento preventivo vencido (${dm} días)`]);
+  return a;
+}
+const lowStock = () => S.inventario.filter(i => +i.nuevos < +i.min);
+const openBuys = () => S.compras.filter(b => !['Recibida','Cancelada'].includes(b.estado));
+
+/* ============ RENDER ============ */
+function renderAll(){ renderKpis(); renderDevices(); renderInv(); renderLogFilters(); renderLog(); renderBuy(); renderCfg(); renderBadges(); }
+
+function renderBadges(){
+  const ls = lowStock().length, ob = openBuys().length;
+  $('bInv').hidden = !ls; $('bInv').textContent = ls;
+  $('bCom').hidden = !ob; $('bCom').textContent = ob;
+}
+
+function renderKpis(){
+  const enUso = S.devices.filter(d=>d.estado==='En uso').length;
+  const al = S.devices.reduce((n,d)=>n+deviceAlerts(d).filter(a=>a[0]!=='p-info').length,0);
+  const mes = today().slice(0,7);
+  const act = S.bitacora.filter(l=>l.fecha.startsWith(mes)).length;
+  $('kpis').innerHTML = [
+    [enUso+' / '+S.devices.length,'Equipos en uso'],
+    [al,'Alertas activas'],
+    [lowStock().length,'Artículos bajo mínimo'],
+    [openBuys().length,'Compras abiertas'],
+    [act,'Actividades este mes']
+  ].map(k=>`<div class="card"><div class="kpi">${k[0]}</div><div class="kpi-l">${k[1]}</div></div>`).join('');
+}
+
+function renderDevices(){
+  $('devices').innerHTML = S.devices.map(d => {
+    const ds = daysSince(d.ultimaDescarga);
+    const al = deviceAlerts(d);
+    return `<div class="card">
+      <div class="dev-head"><h3>${esc(d.nombre)}</h3><span class="pill ${estadoPill(d.estado)}">${esc(d.estado)}</span></div>
+      <dl>
+        <dt>Ubicación</dt><dd>${esc(d.ubicacion)||'—'}</dd>
+        <dt>Set de mangueras</dt><dd>${d.setMangueras?'#'+esc(d.setMangueras):'—'}</dd>
+        <dt>Cambios de cinta</dt><dd>${+d.cambiosCinta||0}</dd>
+        <dt>Instalado</dt><dd>${fmt(d.fechaInstalacion)}</dd>
+        <dt>Última descarga</dt><dd>${fmt(d.ultimaDescarga)}${ds!==null?` <span style="color:var(--muted);font-weight:400">(hace ${ds} d)</span>`:''}</dd>
+        <dt>Batería</dt><dd>${d.bateria!==''?esc(d.bateria)+'%':'—'}</dd>
+        <dt>Últ. mant. prev.</dt><dd>${fmt(d.ultimoMant)}</dd>
+        ${d.serie?`<dt>Serie</dt><dd>${esc(d.serie)}</dd>`:''}
+      </dl>
+      ${al.length?`<div class="alerts">${al.map(a=>`<div class="alert ${a[0]}">${a[1]}</div>`).join('')}</div>`:''}
+      <div class="actions">
+        <button class="btn primary" onclick="openLog('${d.id}','Descarga de datos')">Descarga</button>
+        <button class="btn" onclick="openLog('${d.id}','Cambio de cinta')">+ Cinta</button>
+        <button class="btn" onclick="openLog('${d.id}')">Actividad</button>
+        <button class="btn" onclick="openDev('${d.id}')">Editar</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderInv(){
+  $('invGrid').innerHTML = S.inventario.map(i => {
+    const low = +i.nuevos < +i.min;
+    return `<div class="card inv-item">
+      <h3>${esc(i.nombre)} ${low?'<span class="pill p-bad">Bajo mínimo</span>':'<span class="pill p-ok">OK</span>'}</h3>
+      <div class="counter"><div><div class="lbl">Nuevos</div><div class="hint">mín. ${+i.min} ${esc(i.unidad)}</div></div>
+        <div class="ctrl"><button class="btn mini" onclick="adj('${i.id}','nuevos',-1)">−</button><span class="num">${+i.nuevos}</span><button class="btn mini" onclick="adj('${i.id}','nuevos',1)">+</button></div></div>
+      <div class="counter"><div class="lbl">Usados</div>
+        <div class="ctrl"><button class="btn mini" onclick="adj('${i.id}','usados',-1)">−</button><span class="num">${+i.usados}</span><button class="btn mini" onclick="adj('${i.id}','usados',1)">+</button></div></div>
+      <div class="actions">
+        <button class="btn" onclick="openBuy(null,'${esc(i.nombre)}',${Math.max(1,(+i.min*2)-(+i.nuevos))})">Agregar a compras</button>
+        <button class="btn" onclick="openItem('${i.id}')">Editar</button>
+      </div>
+    </div>`;
+  }).join('') || '<div class="empty">Sin artículos</div>';
+}
+
+function renderLogFilters(){
+  const fd=$('fDev').value, ft=$('fTipo').value;
+  $('fDev').innerHTML = '<option value="">Todos los equipos</option>' + S.devices.map(d=>`<option value="${d.id}">${esc(d.nombre)}</option>`).join('');
+  $('fTipo').innerHTML = '<option value="">Todas las actividades</option>' + Object.keys(TIPOS).map(t=>`<option>${t}</option>`).join('');
+  $('fDev').value=fd; $('fTipo').value=ft;
+}
+
+function renderLog(){
+  const fd=$('fDev').value, ft=$('fTipo').value, fm=$('fMes').value;
+  const rows = S.bitacora.filter(l => (!fd||l.dispositivo===fd) && (!ft||l.tipo===ft) && (!fm||l.fecha.startsWith(fm)))
+    .sort((a,b)=> (b.fecha+b.ts).localeCompare(a.fecha+a.ts));
+  $('logBody').innerHTML = rows.map(l=>`<tr>
+    <td style="white-space:nowrap">${fmt(l.fecha)}</td><td>${esc(devName(l.dispositivo))}</td><td>${esc(l.tipo)}</td>
+    <td>${esc(l.ubicacion)}</td><td>${esc(l.responsable)}</td>
+    <td>${l.matCant>0?`${l.matCant} ${esc(l.matItem)} (${l.matCond==='nuevos'?'nuevo':'usado'})`:''}${l.matRet>0?`<br><span class="hint">Retirado: ${l.matRet}</span>`:''}</td>
+    <td>${esc(l.notas)}</td>
+    <td><button class="btn mini danger" title="Eliminar registro" onclick="delLog('${l.id}')">×</button></td></tr>`).join('')
+    || '<tr><td colspan="8" class="empty">Sin registros</td></tr>';
+}
+
+function renderBuy(){
+  const f=$('fEst').value;
+  const pr={Alta:0,Media:1,Baja:2};
+  const rows = S.compras.filter(b => f==='abiertas' ? !['Recibida','Cancelada'].includes(b.estado) : (!f || b.estado===f))
+    .sort((a,b)=> (pr[a.prioridad]-pr[b.prioridad]) || (a.fecha||'').localeCompare(b.fecha||''));
+  const pp = p => ({Alta:'p-bad',Media:'p-warn',Baja:'p-gray'}[p]);
+  const ep = e => ({Pendiente:'p-warn',Solicitada:'p-info',Aprobada:'p-info','En camino':'p-info',Recibida:'p-ok',Cancelada:'p-gray'}[e]);
+  $('buyBody').innerHTML = rows.map(b=>`<tr>
+    <td><strong>${esc(b.item)}</strong>${b.oc?`<br><span class="hint">OC/Req: ${esc(b.oc)}</span>`:''}</td><td>${+b.cantidad}</td>
+    <td><span class="pill ${pp(b.prioridad)}">${esc(b.prioridad)}</span></td>
+    <td><span class="pill ${ep(b.estado)}">${esc(b.estado)}</span></td>
+    <td>${esc(b.proveedor)}</td><td style="white-space:nowrap">${fmt(b.fecha)}${b.fecha&&!['Recibida','Cancelada'].includes(b.estado)?`<br><span class="hint">hace ${daysSince(b.fecha)} d</span>`:''}</td>
+    <td>${esc(b.notas)}</td>
+    <td style="white-space:nowrap">${!['Recibida','Cancelada'].includes(b.estado)?`<button class="btn" onclick="receive('${b.id}')">Recibida</button> `:''}<button class="btn" onclick="openBuy('${b.id}')">Editar</button></td></tr>`).join('')
+    || '<tr><td colspan="8" class="empty">Sin compras en esta vista</td></tr>';
+}
+
+function renderCfg(){
+  $('cfgDesc').value=S.config.diasDescarga; $('cfgCinta').value=S.config.cintaMax; $('cfgMant').value=S.config.diasMant; $('cfgApi').value=API;
+}
+
+/* ============ DEVICES ============ */
+function openDev(id){
+  const d = S.devices.find(x=>x.id===id);
+  $('dId').value=id; $('dNombre').value=d.nombre; $('dSerie').value=d.serie; $('dModelo').value=d.modelo||''; $('dEstado').value=d.estado;
+  $('dUbic').value=d.ubicacion; $('dSet').value=d.setMangueras; $('dCinta').value=d.cambiosCinta; $('dInst').value=d.fechaInstalacion;
+  $('dDesc').value=d.ultimaDescarga; $('dBat').value=d.bateria; $('dMant').value=d.ultimoMant; $('dNotas').value=d.notas;
+  $('dlgDev').showModal();
+}
+function saveDev(e){
+  if(e.submitter && e.submitter.value!=='ok') return true;
+  const d = S.devices.find(x=>x.id===$('dId').value);
+  Object.assign(d,{nombre:$('dNombre').value.trim(), serie:$('dSerie').value.trim(), modelo:$('dModelo').value.trim(), estado:$('dEstado').value,
+    ubicacion:$('dUbic').value.trim(), setMangueras:$('dSet').value.trim(), cambiosCinta:+$('dCinta').value||0, fechaInstalacion:$('dInst').value,
+    ultimaDescarga:$('dDesc').value, bateria:$('dBat').value, ultimoMant:$('dMant').value, notas:$('dNotas').value.trim()});
+  persist(); return true;
+}
+
+/* ============ LOG ============ */
+function openLog(devId, tipo){
+  $('lDev').innerHTML = S.devices.map(d=>`<option value="${d.id}">${esc(d.nombre)}</option>`).join('');
+  $('lTipo').innerHTML = Object.keys(TIPOS).map(t=>`<option>${t}</option>`).join('');
+  $('lMat').innerHTML = '<option value="">— Ninguno —</option>' + S.inventario.map(i=>`<option value="${i.id}">${esc(i.nombre)}</option>`).join('');
+  $('lFecha').value=today(); if(devId) $('lDev').value=devId; if(tipo) $('lTipo').value=tipo;
+  ['lUbic','lSet','lBat','lNotas'].forEach(i=>$(i).value=''); $('lCant').value=0; $('lRet').value=0;
+  try{ $('lResp').value = localStorage.getItem('xochi_mc_resp')||''; }catch(e){}
+  logHint(); $('dlgLog').showModal();
+}
+function logHint(){
+  const t=$('lTipo').value;
+  $('lHint').textContent = TIPOS[t]||'';
+  $('lUbicWrap').style.display = ['Instalación','Inspección en campo','Descarga de datos'].includes(t)?'':'none';
+  $('lSetWrap').style.display  = ['Instalación','Cambio de mangueras'].includes(t)?'':'none';
+  $('lBatWrap').style.display  = ['Cambio de batería','Descarga de datos','Mantenimiento preventivo','Inspección en campo'].includes(t)?'':'none';
+  if(t==='Instalación' || t==='Inspección en campo' || t==='Descarga de datos'){
+    const d=S.devices.find(x=>x.id===$('lDev').value); if(d && !$('lUbic').value) $('lUbic').value=d.ubicacion||'';
+  }
+}
+function saveLog(e){
+  if(e.submitter && e.submitter.value!=='ok') return true;
+  const l = {id:uid(), ts:new Date().toISOString(), fecha:$('lFecha').value, dispositivo:$('lDev').value, tipo:$('lTipo').value,
+    ubicacion:$('lUbic').value.trim(), setMangueras:$('lSet').value.trim(), bateria:$('lBat').value,
+    responsable:$('lResp').value.trim(), notas:$('lNotas').value.trim(), matItem:'', matCant:+$('lCant').value||0, matCond:$('lCond').value, matRet:+$('lRet').value||0};
+  try{ localStorage.setItem('xochi_mc_resp', l.responsable); }catch(e){}
+  const d = S.devices.find(x=>x.id===l.dispositivo);
+  if(!l.ubicacion && d) l.ubicacion = d.ubicacion;
+
+  // Inventario
+  const it = S.inventario.find(i=>i.id===$('lMat').value);
+  if(it){
+    l.matItem = it.nombre;
+    if(l.matCant>0){
+      if(+it[l.matCond] < l.matCant && !confirm(`Solo hay ${it[l.matCond]} ${it.nombre} ${l.matCond}. ¿Registrar de todos modos? (quedará en 0)`)) return false;
+      it[l.matCond] = Math.max(0, +it[l.matCond] - l.matCant);
+    }
+    if(l.matRet>0) it.usados = +it.usados + l.matRet;
+  } else { l.matCant=0; l.matRet=0; }
+
+  // Efectos en el equipo
+  const later = (a,b) => !a || b >= a;
+  switch(l.tipo){
+    case 'Instalación': d.estado='En uso'; d.fechaInstalacion=l.fecha; d.cambiosCinta=0; if(l.ubicacion) d.ubicacion=l.ubicacion; if(l.setMangueras) d.setMangueras=l.setMangueras; break;
+    case 'Retiro': d.estado='En bodega'; break;
+    case 'Descarga de datos': if(later(d.ultimaDescarga,l.fecha)) d.ultimaDescarga=l.fecha; break;
+    case 'Cambio de cinta': d.cambiosCinta=(+d.cambiosCinta||0)+1; break;
+    case 'Cambio de mangueras': if(l.setMangueras) d.setMangueras=l.setMangueras; d.cambiosCinta=0; break;
+    case 'Cambio de batería': if(later(d.ultimoMant,l.fecha)) d.ultimoMant=l.fecha; if(l.bateria==='') l.bateria='100'; break;
+    case 'Mantenimiento preventivo': if(later(d.ultimoMant,l.fecha)) d.ultimoMant=l.fecha; if(d.estado==='En mantenimiento') d.estado='En bodega'; break;
+    case 'Reparación / falla': d.estado='En mantenimiento'; break;
+  }
+  if(l.bateria!=='') d.bateria=l.bateria;
+  S.bitacora.push(l);
+  persist(); return true;
+}
+function delLog(id){
+  if(!confirm('¿Eliminar este registro? (No revierte cambios de inventario ni del equipo)')) return;
+  S.bitacora = S.bitacora.filter(l=>l.id!==id); persist();
+}
+
+/* ============ INVENTORY ============ */
+function adj(id, k, n){ const i=S.inventario.find(x=>x.id===id); i[k]=Math.max(0,(+i[k]||0)+n); persist(); }
+function openItem(id){
+  const i = id ? S.inventario.find(x=>x.id===id) : {id:'',nombre:'',unidad:'unidades',nuevos:0,usados:0,min:0};
+  $('iId').value=i.id; $('iNombre').value=i.nombre; $('iUnidad').value=i.unidad; $('iMin').value=i.min; $('iNuevos').value=i.nuevos; $('iUsados').value=i.usados;
+  $('iDel').style.display = id?'':'none'; $('dlgItem').showModal();
+}
+function saveItem(e){
+  if(e.submitter && e.submitter.value!=='ok') return true;
+  const v={nombre:$('iNombre').value.trim(), unidad:$('iUnidad').value.trim(), min:+$('iMin').value||0, nuevos:+$('iNuevos').value||0, usados:+$('iUsados').value||0};
+  const id=$('iId').value;
+  if(id) Object.assign(S.inventario.find(x=>x.id===id), v); else S.inventario.push({id:uid(),...v});
+  persist(); return true;
+}
+function delItem(){
+  if(!confirm('¿Eliminar este artículo del inventario?')) return;
+  S.inventario = S.inventario.filter(x=>x.id!==$('iId').value); $('dlgItem').close(); persist();
+}
+
+/* ============ PURCHASES ============ */
+function openBuy(id, item, cant){
+  $('itemList').innerHTML = S.inventario.map(i=>`<option value="${esc(i.nombre)}">`).join('');
+  const b = id ? S.compras.find(x=>x.id===id) : {id:'',item:item||'',cantidad:cant||1,prioridad:'Media',estado:'Pendiente',fecha:today(),proveedor:'',oc:'',notas:''};
+  $('bId').value=b.id; $('bItem').value=b.item; $('bCant').value=b.cantidad; $('bPrio').value=b.prioridad; $('bEst').value=b.estado;
+  $('bFecha').value=b.fecha; $('bProv').value=b.proveedor; $('bOC').value=b.oc||''; $('bNotas').value=b.notas;
+  $('bDel').style.display = id?'':'none'; $('dlgBuy').showModal();
+}
+function saveBuy(e){
+  if(e.submitter && e.submitter.value!=='ok') return true;
+  const id=$('bId').value;
+  const prev = id ? S.compras.find(x=>x.id===id) : null;
+  const v={item:$('bItem').value.trim(), cantidad:+$('bCant').value||1, prioridad:$('bPrio').value, estado:$('bEst').value, fecha:$('bFecha').value, proveedor:$('bProv').value.trim(), oc:$('bOC').value.trim(), notas:$('bNotas').value.trim()};
+  const becameReceived = v.estado==='Recibida' && (!prev || prev.estado!=='Recibida');
+  let b;
+  if(prev){ Object.assign(prev,v); b=prev; } else { b={id:uid(),...v}; S.compras.push(b); }
+  if(becameReceived) addToStock(b);
+  persist(); return true;
+}
+function receive(id){
+  const b=S.compras.find(x=>x.id===id);
+  if(!confirm(`Marcar como recibida: ${b.cantidad} ${b.item}.\nSe sumará al inventario de nuevos.`)) return;
+  b.estado='Recibida'; addToStock(b); persist();
+}
+function addToStock(b){
+  b.fechaRecibida = today();
+  const it = S.inventario.find(i=>i.nombre.toLowerCase()===b.item.toLowerCase());
+  if(it) it.nuevos = (+it.nuevos||0) + (+b.cantidad);
+  else if(confirm(`"${b.item}" no existe en inventario. ¿Crearlo con ${b.cantidad} nuevos?`))
+    S.inventario.push({id:uid(), nombre:b.item, unidad:'unidades', nuevos:+b.cantidad, usados:0, min:0});
+}
+function delBuy(){
+  if(!confirm('¿Eliminar esta compra?')) return;
+  S.compras = S.compras.filter(x=>x.id!==$('bId').value); $('dlgBuy').close(); persist();
+}
+
+/* ============ SETTINGS / EXPORT ============ */
+function saveCfg(){ S.config={diasDescarga:+$('cfgDesc').value||7, cintaMax:+$('cfgCinta').value||5, diasMant:+$('cfgMant').value||90}; persist(); alert('Ajustes guardados'); }
+function saveApi(){ API=$('cfgApi').value.trim(); try{localStorage.setItem(LS_API,API);}catch(e){} if(API) pull(); else setSync('','Local'); }
+function download(name, content, type){ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([content],{type})); a.download=name; a.click(); }
+function exportJSON(){ download(`metrocount_respaldo_${today()}.json`, JSON.stringify(S,null,2), 'application/json'); }
+function importJSON(inp){
+  const f=inp.files[0]; if(!f) return;
+  f.text().then(t=>{ try{ const d=JSON.parse(t); if(!d.devices) throw 0; if(confirm('Esto reemplaza todos los datos actuales. ¿Continuar?')){ S=Object.assign(defaultState(),d); persist(); } }catch(e){ alert('Archivo no válido'); } inp.value=''; });
+}
+function exportCSV(which){
+  const csvq = v => `"${String(v??'').replace(/"/g,'""')}"`;
+  let head, rows;
+  if(which==='bitacora'){
+    head=['Fecha','Equipo','Actividad','Ubicación','Set mangueras','Batería','Responsable','Material','Cantidad','Condición','Retirado','Notas'];
+    rows=S.bitacora.map(l=>[l.fecha,devName(l.dispositivo),l.tipo,l.ubicacion,l.setMangueras,l.bateria,l.responsable,l.matItem,l.matCant,l.matCond,l.matRet,l.notas]);
+  } else {
+    head=['Artículo','Cantidad','Prioridad','Estado','Proveedor','OC/Req','Fecha solicitud','Fecha recibida','Notas'];
+    rows=S.compras.map(b=>[b.item,b.cantidad,b.prioridad,b.estado,b.proveedor,b.oc,b.fecha,b.fechaRecibida,b.notas]);
+  }
+  download(`metrocount_${which}_${today()}.csv`, '\ufeff'+[head,...rows].map(r=>r.map(csvq).join(',')).join('\n'), 'text/csv');
+}
+
+/* ============ INIT ============ */
+document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#tabs button').forEach(x=>x.classList.toggle('active',x===b));
+  document.querySelectorAll('main section').forEach(s=>s.classList.toggle('active',s.id===b.dataset.tab));
+});
+renderAll();
+pull();
+</script>
+</body>
+</html>
