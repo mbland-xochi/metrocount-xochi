@@ -197,7 +197,8 @@
     <div><label>Modelo</label><input id="dModelo" placeholder="RoadPod VT"></div>
     <div><label>Estado</label><select id="dEstado"><option>En uso</option><option>En bodega</option><option>En mantenimiento</option><option>Fuera de servicio</option></select></div>
     <div class="full"><label>Ubicación</label><input id="dUbic" placeholder="KM 152 CA-2, sentido ..."></div>
-    <div><label>Set de mangueras #</label><input id="dSet"></div>
+    <div><label>Manguera A (ID)</label><input id="dMA" placeholder="Ej. A-03"></div>
+    <div><label>Manguera B (ID)</label><input id="dMB" placeholder="Ej. B-05"></div>
     <div><label>Cambios de cinta (instalación actual)</label><input type="number" id="dCinta" min="0"></div>
     <div><label>Fecha de instalación</label><input type="date" id="dInst"></div>
     <div><label>Última descarga de datos</label><input type="date" id="dDesc"></div>
@@ -216,7 +217,12 @@
     <div class="full"><label>Actividad</label><select id="lTipo" required onchange="logHint()"></select>
       <div class="hint" id="lHint"></div></div>
     <div class="full" id="lUbicWrap"><label>Ubicación</label><input id="lUbic" placeholder="KM / sentido / carril"></div>
-    <div id="lSetWrap"><label>Set de mangueras #</label><input id="lSet"></div>
+    <div class="full" id="lSetWrap"><div class="form-grid">
+      <div id="lLadoWrap"><label>¿Qué manguera?</label><select id="lLado" onchange="logHint()"><option value="A">Solo A</option><option value="B">Solo B</option><option value="AB">Ambas (A y B)</option></select></div>
+      <div></div>
+      <div id="lMAWrap"><label>Nueva Manguera A (ID)</label><input id="lMA"></div>
+      <div id="lMBWrap"><label>Nueva Manguera B (ID)</label><input id="lMB"></div>
+    </div></div>
     <div id="lBatWrap"><label>Batería (%)</label><input type="number" id="lBat" min="0" max="100"></div>
     <div class="full"><label>Responsable</label><input id="lResp" required></div>
     <fieldset class="full"><legend>Material utilizado (descuenta del inventario)</legend>
@@ -270,11 +276,11 @@ const API_URL = 'https://script.google.com/macros/s/AKfycbzbEZd3k9_uOsnaa0XvOeI-
 const LS_KEY = 'xochi_metrocount_v1';
 const LS_API = 'xochi_metrocount_api';
 const TIPOS = {
-  'Instalación':            'Pone el equipo "En uso", actualiza ubicación y set de mangueras, reinicia el conteo de cambios de cinta.',
+  'Instalación':            'Pone el equipo "En uso", actualiza ubicación y mangueras A y B, reinicia el conteo de cambios de cinta.',
   'Retiro':                 'Pasa el equipo a "En bodega".',
   'Descarga de datos':      'Actualiza la fecha de última descarga.',
   'Cambio de cinta':        'Suma 1 al conteo de cambios de cinta.',
-  'Cambio de mangueras':    'Actualiza el set de mangueras y reinicia el conteo de cinta.',
+  'Cambio de manguera':     'Cambia la Manguera A, la B o ambas. Si cambian ambas, reinicia el conteo de cinta.',
   'Cambio de batería':      'Actualiza la batería y registra mantenimiento.',
   'Inspección en campo':    'Registro de revisión visual (mangueras, clavos, figure 8, tapones).',
   'Mantenimiento preventivo':'Actualiza la fecha de último mantenimiento.',
@@ -289,7 +295,7 @@ const today = () => new Date().toISOString().slice(0,10);
 
 function defaultState(){
   return {
-    devices: [1,2,3].map(n => ({id:'mc'+n, nombre:'MetroCount #'+n, serie:'', modelo:'', estado:'En bodega', ubicacion:'', setMangueras:'', cambiosCinta:0, fechaInstalacion:'', ultimaDescarga:'', bateria:'', ultimoMant:'', notas:''})),
+    devices: [1,2,3].map(n => ({id:'mc'+n, nombre:'MetroCount #'+n, serie:'', modelo:'', estado:'En bodega', ubicacion:'', mangueraA:'', mangueraB:'', cambiosCinta:0, fechaInstalacion:'', ultimaDescarga:'', bateria:'', ultimoMant:'', notas:''})),
     inventario: [
       {id:uid(), nombre:'Mangueras', unidad:'unidades', nuevos:0, usados:0, min:2},
       {id:uid(), nombre:'Clavos',    unidad:'unidades', nuevos:0, usados:0, min:20},
@@ -305,6 +311,13 @@ function defaultState(){
 let S;
 try { S = JSON.parse(localStorage.getItem(LS_KEY)) || defaultState(); } catch(e){ S = defaultState(); }
 let API = API_URL; try { API = localStorage.getItem(LS_API) || API_URL; } catch(e){}
+
+function migrate(s){
+  (s.devices||[]).forEach(d=>{ if(d.setMangueras!==undefined){ if(!d.mangueraA) d.mangueraA=d.setMangueras; delete d.setMangueras; } if(d.mangueraA===undefined) d.mangueraA=''; if(d.mangueraB===undefined) d.mangueraB=''; });
+  (s.bitacora||[]).forEach(l=>{ if(l.tipo==='Cambio de mangueras') l.tipo='Cambio de manguera'; });
+  return s;
+}
+migrate(S);
 
 function persist(){
   S.updated = new Date().toISOString();
@@ -336,7 +349,7 @@ async function pull(){
     const r = await fetch(API+'?action=getAll');
     const j = await r.json();
     if(j.ok && j.data && j.data.devices && j.data.devices.length){
-      S = Object.assign(defaultState(), j.data);
+      S = migrate(Object.assign(defaultState(), j.data));
       try { localStorage.setItem(LS_KEY, JSON.stringify(S)); } catch(e){}
       renderAll();
       setSync('ok','Sincronizado');
@@ -401,7 +414,8 @@ function renderDevices(){
       <div class="dev-head"><h3>${esc(d.nombre)}</h3><span class="pill ${estadoPill(d.estado)}">${esc(d.estado)}</span></div>
       <dl>
         <dt>Ubicación</dt><dd>${esc(d.ubicacion)||'—'}</dd>
-        <dt>Set de mangueras</dt><dd>${d.setMangueras?'#'+esc(d.setMangueras):'—'}</dd>
+        <dt>Manguera A</dt><dd>${esc(d.mangueraA)||'—'}</dd>
+        <dt>Manguera B</dt><dd>${esc(d.mangueraB)||'—'}</dd>
         <dt>Cambios de cinta</dt><dd>${+d.cambiosCinta||0}</dd>
         <dt>Instalado</dt><dd>${fmt(d.fechaInstalacion)}</dd>
         <dt>Última descarga</dt><dd>${fmt(d.ultimaDescarga)}${ds!==null?` <span style="color:var(--muted);font-weight:400">(hace ${ds} d)</span>`:''}</dd>
@@ -482,7 +496,7 @@ function renderCfg(){
 function openDev(id){
   const d = S.devices.find(x=>x.id===id);
   $('dId').value=id; $('dNombre').value=d.nombre; $('dSerie').value=d.serie; $('dModelo').value=d.modelo||''; $('dEstado').value=d.estado;
-  $('dUbic').value=d.ubicacion; $('dSet').value=d.setMangueras; $('dCinta').value=d.cambiosCinta; $('dInst').value=d.fechaInstalacion;
+  $('dUbic').value=d.ubicacion; $('dMA').value=d.mangueraA||''; $('dMB').value=d.mangueraB||''; $('dCinta').value=d.cambiosCinta; $('dInst').value=d.fechaInstalacion;
   $('dDesc').value=d.ultimaDescarga; $('dBat').value=d.bateria; $('dMant').value=d.ultimoMant; $('dNotas').value=d.notas;
   $('dlgDev').showModal();
 }
@@ -490,7 +504,7 @@ function saveDev(e){
   if(e.submitter && e.submitter.value!=='ok') return true;
   const d = S.devices.find(x=>x.id===$('dId').value);
   Object.assign(d,{nombre:$('dNombre').value.trim(), serie:$('dSerie').value.trim(), modelo:$('dModelo').value.trim(), estado:$('dEstado').value,
-    ubicacion:$('dUbic').value.trim(), setMangueras:$('dSet').value.trim(), cambiosCinta:+$('dCinta').value||0, fechaInstalacion:$('dInst').value,
+    ubicacion:$('dUbic').value.trim(), mangueraA:$('dMA').value.trim(), mangueraB:$('dMB').value.trim(), cambiosCinta:+$('dCinta').value||0, fechaInstalacion:$('dInst').value,
     ultimaDescarga:$('dDesc').value, bateria:$('dBat').value, ultimoMant:$('dMant').value, notas:$('dNotas').value.trim()});
   persist(); return true;
 }
@@ -501,7 +515,7 @@ function openLog(devId, tipo){
   $('lTipo').innerHTML = Object.keys(TIPOS).map(t=>`<option>${t}</option>`).join('');
   $('lMat').innerHTML = '<option value="">— Ninguno —</option>' + S.inventario.map(i=>`<option value="${i.id}">${esc(i.nombre)}</option>`).join('');
   $('lFecha').value=today(); if(devId) $('lDev').value=devId; if(tipo) $('lTipo').value=tipo;
-  ['lUbic','lSet','lBat','lNotas'].forEach(i=>$(i).value=''); $('lCant').value=0; $('lRet').value=0;
+  ['lUbic','lMA','lMB','lBat','lNotas'].forEach(i=>$(i).value=''); $('lLado').value='A'; $('lCant').value=0; $('lRet').value=0;
   try{ $('lResp').value = localStorage.getItem('xochi_mc_resp')||''; }catch(e){}
   logHint(); $('dlgLog').showModal();
 }
@@ -509,7 +523,13 @@ function logHint(){
   const t=$('lTipo').value;
   $('lHint').textContent = TIPOS[t]||'';
   $('lUbicWrap').style.display = ['Instalación','Inspección en campo','Descarga de datos'].includes(t)?'':'none';
-  $('lSetWrap').style.display  = ['Instalación','Cambio de mangueras'].includes(t)?'':'none';
+  $('lSetWrap').style.display  = ['Instalación','Cambio de manguera'].includes(t)?'':'none';
+  const lado = t==='Instalación' ? 'AB' : $('lLado').value;
+  $('lLadoWrap').style.display = t==='Instalación'?'none':'';
+  $('lMAWrap').style.display = lado.includes('A')?'':'none';
+  $('lMBWrap').style.display = lado.includes('B')?'':'none';
+  const dv=S.devices.find(x=>x.id===$('lDev').value);
+  if(t==='Instalación' && dv){ if(!$('lMA').value) $('lMA').value=dv.mangueraA||''; if(!$('lMB').value) $('lMB').value=dv.mangueraB||''; }
   $('lBatWrap').style.display  = ['Cambio de batería','Descarga de datos','Mantenimiento preventivo','Inspección en campo'].includes(t)?'':'none';
   if(t==='Instalación' || t==='Inspección en campo' || t==='Descarga de datos'){
     const d=S.devices.find(x=>x.id===$('lDev').value); if(d && !$('lUbic').value) $('lUbic').value=d.ubicacion||'';
@@ -518,9 +538,14 @@ function logHint(){
 function saveLog(e){
   if(e.submitter && e.submitter.value!=='ok') return true;
   const l = {id:uid(), ts:new Date().toISOString(), fecha:$('lFecha').value, dispositivo:$('lDev').value, tipo:$('lTipo').value,
-    ubicacion:$('lUbic').value.trim(), setMangueras:$('lSet').value.trim(), bateria:$('lBat').value,
+    ubicacion:$('lUbic').value.trim(), lado:'', mangueraA:'', mangueraB:'', bateria:$('lBat').value,
     responsable:$('lResp').value.trim(), notas:$('lNotas').value.trim(), matItem:'', matCant:+$('lCant').value||0, matCond:$('lCond').value, matRet:+$('lRet').value||0};
   try{ localStorage.setItem('xochi_mc_resp', l.responsable); }catch(e){}
+  if(l.tipo==='Instalación' || l.tipo==='Cambio de manguera'){
+    l.lado = l.tipo==='Instalación' ? 'AB' : $('lLado').value;
+    if(l.lado.includes('A')) l.mangueraA=$('lMA').value.trim();
+    if(l.lado.includes('B')) l.mangueraB=$('lMB').value.trim();
+  }
   const d = S.devices.find(x=>x.id===l.dispositivo);
   if(!l.ubicacion && d) l.ubicacion = d.ubicacion;
 
@@ -538,11 +563,15 @@ function saveLog(e){
   // Efectos en el equipo
   const later = (a,b) => !a || b >= a;
   switch(l.tipo){
-    case 'Instalación': d.estado='En uso'; d.fechaInstalacion=l.fecha; d.cambiosCinta=0; if(l.ubicacion) d.ubicacion=l.ubicacion; if(l.setMangueras) d.setMangueras=l.setMangueras; break;
+    case 'Instalación': d.estado='En uso'; d.fechaInstalacion=l.fecha; d.cambiosCinta=0; if(l.ubicacion) d.ubicacion=l.ubicacion; if(l.mangueraA) d.mangueraA=l.mangueraA; if(l.mangueraB) d.mangueraB=l.mangueraB; break;
     case 'Retiro': d.estado='En bodega'; break;
     case 'Descarga de datos': if(later(d.ultimaDescarga,l.fecha)) d.ultimaDescarga=l.fecha; break;
     case 'Cambio de cinta': d.cambiosCinta=(+d.cambiosCinta||0)+1; break;
-    case 'Cambio de mangueras': if(l.setMangueras) d.setMangueras=l.setMangueras; d.cambiosCinta=0; break;
+    case 'Cambio de manguera':
+      if(l.lado.includes('A') && l.mangueraA) d.mangueraA=l.mangueraA;
+      if(l.lado.includes('B') && l.mangueraB) d.mangueraB=l.mangueraB;
+      if(l.lado==='AB') d.cambiosCinta=0;
+      break;
     case 'Cambio de batería': if(later(d.ultimoMant,l.fecha)) d.ultimoMant=l.fecha; if(l.bateria==='') l.bateria='100'; break;
     case 'Mantenimiento preventivo': if(later(d.ultimoMant,l.fecha)) d.ultimoMant=l.fecha; if(d.estado==='En mantenimiento') d.estado='En bodega'; break;
     case 'Reparación / falla': d.estado='En mantenimiento'; break;
@@ -618,14 +647,14 @@ function download(name, content, type){ const a=document.createElement('a'); a.h
 function exportJSON(){ download(`metrocount_respaldo_${today()}.json`, JSON.stringify(S,null,2), 'application/json'); }
 function importJSON(inp){
   const f=inp.files[0]; if(!f) return;
-  f.text().then(t=>{ try{ const d=JSON.parse(t); if(!d.devices) throw 0; if(confirm('Esto reemplaza todos los datos actuales. ¿Continuar?')){ S=Object.assign(defaultState(),d); persist(); } }catch(e){ alert('Archivo no válido'); } inp.value=''; });
+  f.text().then(t=>{ try{ const d=JSON.parse(t); if(!d.devices) throw 0; if(confirm('Esto reemplaza todos los datos actuales. ¿Continuar?')){ S=migrate(Object.assign(defaultState(),d)); persist(); } }catch(e){ alert('Archivo no válido'); } inp.value=''; });
 }
 function exportCSV(which){
   const csvq = v => `"${String(v??'').replace(/"/g,'""')}"`;
   let head, rows;
   if(which==='bitacora'){
-    head=['Fecha','Equipo','Actividad','Ubicación','Set mangueras','Batería','Responsable','Material','Cantidad','Condición','Retirado','Notas'];
-    rows=S.bitacora.map(l=>[l.fecha,devName(l.dispositivo),l.tipo,l.ubicacion,l.setMangueras,l.bateria,l.responsable,l.matItem,l.matCant,l.matCond,l.matRet,l.notas]);
+    head=['Fecha','Equipo','Actividad','Ubicación','Manguera cambiada','Manguera A','Manguera B','Batería','Responsable','Material','Cantidad','Condición','Retirado','Notas'];
+    rows=S.bitacora.map(l=>[l.fecha,devName(l.dispositivo),l.tipo,l.ubicacion,l.lado||'',l.mangueraA||'',l.mangueraB||'',l.bateria,l.responsable,l.matItem,l.matCant,l.matCond,l.matRet,l.notas]);
   } else {
     head=['Artículo','Cantidad','Prioridad','Estado','Proveedor','OC/Req','Fecha solicitud','Fecha recibida','Notas'];
     rows=S.compras.map(b=>[b.item,b.cantidad,b.prioridad,b.estado,b.proveedor,b.oc,b.fecha,b.fechaRecibida,b.notas]);
