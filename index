@@ -264,6 +264,9 @@
 
 <script>
 /* ============ CONFIG ============ */
+// 👇 PEGA AQUÍ LA URL DEL WEB APP DE APPS SCRIPT (termina en /exec)
+const API_URL = 'https://script.google.com/macros/s/AKfycbzbEZd3k9_uOsnaa0XvOeI-QP0lr1_DCofveuOPK7EzD5GTMxeEI0695yLaPtY2E8pY/exec';
+
 const LS_KEY = 'xochi_metrocount_v1';
 const LS_API = 'xochi_metrocount_api';
 const TIPOS = {
@@ -301,7 +304,7 @@ function defaultState(){
 }
 let S;
 try { S = JSON.parse(localStorage.getItem(LS_KEY)) || defaultState(); } catch(e){ S = defaultState(); }
-let API = ''; try { API = localStorage.getItem(LS_API) || ''; } catch(e){}
+let API = API_URL; try { API = localStorage.getItem(LS_API) || API_URL; } catch(e){}
 
 function persist(){
   S.updated = new Date().toISOString();
@@ -610,7 +613,7 @@ function delBuy(){
 
 /* ============ SETTINGS / EXPORT ============ */
 function saveCfg(){ S.config={diasDescarga:+$('cfgDesc').value||7, cintaMax:+$('cfgCinta').value||5, diasMant:+$('cfgMant').value||90}; persist(); alert('Ajustes guardados'); }
-function saveApi(){ API=$('cfgApi').value.trim(); try{localStorage.setItem(LS_API,API);}catch(e){} if(API) pull(); else setSync('','Local'); }
+function saveApi(){ API=$('cfgApi').value.trim() || API_URL; try{ if($('cfgApi').value.trim()) localStorage.setItem(LS_API,API); else localStorage.removeItem(LS_API); }catch(e){} if(API) pull(); else setSync('','Local'); }
 function download(name, content, type){ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([content],{type})); a.download=name; a.click(); }
 function exportJSON(){ download(`metrocount_respaldo_${today()}.json`, JSON.stringify(S,null,2), 'application/json'); }
 function importJSON(inp){
