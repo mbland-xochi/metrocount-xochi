@@ -218,8 +218,7 @@
       <div class="hint" id="lHint"></div></div>
     <div class="full" id="lUbicWrap"><label>Ubicación</label><input id="lUbic" placeholder="KM / sentido / carril"></div>
     <div class="full" id="lSetWrap"><div class="form-grid">
-      <div id="lLadoWrap"><label>¿Qué manguera?</label><select id="lLado" onchange="logHint()"><option value="A">Solo A</option><option value="B">Solo B</option><option value="AB">Ambas (A y B)</option></select></div>
-      <div></div>
+      <div class="full" id="lLadoWrap"><label>¿Qué manguera?</label><select id="lLado" onchange="logHint()"><option value="A">Solo A</option><option value="B">Solo B</option><option value="AB">Ambas (A y B)</option></select></div>
       <div id="lMAWrap"><label>Nueva Manguera A (ID)</label><input id="lMA"></div>
       <div id="lMBWrap"><label>Nueva Manguera B (ID)</label><input id="lMB"></div>
     </div></div>
@@ -279,7 +278,7 @@ const TIPOS = {
   'Instalación':            'Pone el equipo "En uso", actualiza ubicación y mangueras A y B, reinicia el conteo de cambios de cinta.',
   'Retiro':                 'Pasa el equipo a "En bodega".',
   'Descarga de datos':      'Actualiza la fecha de última descarga.',
-  'Cambio de cinta':        'Suma 1 al conteo de cambios de cinta.',
+  'Cambio de cinta':        'Suma 1 al conteo de cambios de cinta. Indica abajo la cinta asfáltica utilizada.',
   'Cambio de manguera':     'Cambia la Manguera A, la B o ambas. Si cambian ambas, reinicia el conteo de cinta.',
   'Cambio de batería':      'Actualiza la batería y registra mantenimiento.',
   'Inspección en campo':    'Registro de revisión visual (mangueras, clavos, figure 8, tapones).',
@@ -298,13 +297,14 @@ function defaultState(){
     devices: [1,2,3].map(n => ({id:'mc'+n, nombre:'MetroCount #'+n, serie:'', modelo:'', estado:'En bodega', ubicacion:'', mangueraA:'', mangueraB:'', cambiosCinta:0, fechaInstalacion:'', ultimaDescarga:'', bateria:'', ultimoMant:'', notas:''})),
     inventario: [
       {id:uid(), nombre:'Mangueras', unidad:'unidades', nuevos:0, usados:0, min:2},
-      {id:uid(), nombre:'Clavos',    unidad:'unidades', nuevos:0, usados:0, min:20},
-      {id:uid(), nombre:'Figure 8',  unidad:'unidades', nuevos:0, usados:0, min:6},
-      {id:uid(), nombre:'Tapones',   unidad:'unidades', nuevos:0, usados:0, min:6},
+      {id:uid(), nombre:'Clavos',    unidad:'unidades', nuevos:0, usados:0, min:24},
+      {id:uid(), nombre:'Figure 8',  unidad:'unidades', nuevos:0, usados:0, min:12},
+      {id:uid(), nombre:'Tapones',   unidad:'unidades', nuevos:0, usados:0, min:12},
+      {id:uid(), nombre:'Cinta asfáltica', unidad:'rollos', nuevos:0, usados:0, min:1},
     ],
     bitacora: [],
     compras: [],
-    config: {diasDescarga:7, cintaMax:5, diasMant:90},
+    config: {diasDescarga:7, cintaMax:5, diasMant:90, minsV2:1},
     updated: new Date().toISOString()
   };
 }
@@ -315,6 +315,12 @@ let API = API_URL; try { API = localStorage.getItem(LS_API) || API_URL; } catch(
 function migrate(s){
   (s.devices||[]).forEach(d=>{ if(d.setMangueras!==undefined){ if(!d.mangueraA) d.mangueraA=d.setMangueras; delete d.setMangueras; } if(d.mangueraA===undefined) d.mangueraA=''; if(d.mangueraB===undefined) d.mangueraB=''; });
   (s.bitacora||[]).forEach(l=>{ if(l.tipo==='Cambio de mangueras') l.tipo='Cambio de manguera'; });
+  if(s.inventario && !s.inventario.some(i=>/cinta/i.test(i.nombre))) s.inventario.push({id:uid(), nombre:'Cinta asfáltica', unidad:'rollos', nuevos:0, usados:0, min:1});
+  if(s.config && !s.config.minsV2){
+    const M={'mangueras':2,'clavos':24,'figure 8':12,'tapones':12,'cinta asfáltica':1};
+    (s.inventario||[]).forEach(i=>{ const k=String(i.nombre).toLowerCase().trim(); if(M[k]!==undefined) i.min=M[k]; });
+    s.config.minsV2=1;
+  }
   return s;
 }
 migrate(S);
@@ -517,6 +523,7 @@ function openLog(devId, tipo){
   $('lFecha').value=today(); if(devId) $('lDev').value=devId; if(tipo) $('lTipo').value=tipo;
   ['lUbic','lMA','lMB','lBat','lNotas'].forEach(i=>$(i).value=''); $('lLado').value='A'; $('lCant').value=0; $('lRet').value=0;
   try{ $('lResp').value = localStorage.getItem('xochi_mc_resp')||''; }catch(e){}
+  if(tipo==='Cambio de cinta'){ const c=S.inventario.find(i=>/cinta/i.test(i.nombre)); if(c){ $('lMat').value=c.id; $('lCant').value=1; } }
   logHint(); $('dlgLog').showModal();
 }
 function logHint(){
@@ -641,7 +648,7 @@ function delBuy(){
 }
 
 /* ============ SETTINGS / EXPORT ============ */
-function saveCfg(){ S.config={diasDescarga:+$('cfgDesc').value||7, cintaMax:+$('cfgCinta').value||5, diasMant:+$('cfgMant').value||90}; persist(); alert('Ajustes guardados'); }
+function saveCfg(){ S.config={...S.config, diasDescarga:+$('cfgDesc').value||7, cintaMax:+$('cfgCinta').value||5, diasMant:+$('cfgMant').value||90}; persist(); alert('Ajustes guardados'); }
 function saveApi(){ API=$('cfgApi').value.trim() || API_URL; try{ if($('cfgApi').value.trim()) localStorage.setItem(LS_API,API); else localStorage.removeItem(LS_API); }catch(e){} if(API) pull(); else setSync('','Local'); }
 function download(name, content, type){ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([content],{type})); a.download=name; a.click(); }
 function exportJSON(){ download(`metrocount_respaldo_${today()}.json`, JSON.stringify(S,null,2), 'application/json'); }
