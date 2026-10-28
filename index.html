@@ -296,7 +296,7 @@ function defaultState(){
   return {
     devices: [1,2,3].map(n => ({id:'mc'+n, nombre:'MetroCount #'+n, serie:'', modelo:'', estado:'En bodega', ubicacion:'', mangueraA:'', mangueraB:'', cambiosCinta:0, fechaInstalacion:'', ultimaDescarga:'', memoria:'', ultimoMant:'', notas:''})),
     inventario: [
-      {id:uid(), nombre:'Mangueras mínimo de 10 m', unidad:'unidades', nuevos:0, usados:0, min:2},
+      {id:uid(), nombre:'Mangueras mínimo de 10 m', unidad:'unidades', nuevos:0, usados:0, min:6},
       {id:uid(), nombre:'Clavos',    unidad:'unidades', nuevos:0, usados:0, min:24},
       {id:uid(), nombre:'Figure 8',  unidad:'unidades', nuevos:0, usados:0, min:12},
       {id:uid(), nombre:'Tapones',   unidad:'unidades', nuevos:0, usados:0, min:6},
@@ -305,7 +305,7 @@ function defaultState(){
     ],
     bitacora: [],
     compras: [],
-    config: {diasDescarga:7, cintaMax:5, diasMant:90, minsV2:1, minsV3:1},
+    config: {diasDescarga:7, cintaMax:5, diasMant:90, minsV2:1, minsV3:1, minsV4:1},
     updated: new Date().toISOString()
   };
 }
@@ -318,7 +318,7 @@ function migrate(s){
   (s.bitacora||[]).forEach(l=>{ if(l.tipo==='Cambio de mangueras') l.tipo='Cambio de manguera'; if('bateria' in l){ if(l.memoria===undefined) l.memoria=''; delete l.bateria; } });
   (s.devices||[]).forEach(d=>{ if('bateria' in d){ delete d.bateria; } if(d.memoria===undefined) d.memoria=''; });
   if(s.inventario && !s.inventario.some(i=>/cinta/i.test(i.nombre))) s.inventario.push({id:uid(), nombre:'Cinta asfáltica', unidad:'rollos', nuevos:0, usados:0, min:1});
-  (s.inventario||[]).forEach(i=>{ if(/cinta/i.test(i.nombre)){ i.tipo='existencia'; i.nuevos = +i.nuevos>0 ? 1 : 0; i.usados=0; i.min=1; } });
+  (s.inventario||[]).forEach(i=>{ if(/cinta/i.test(i.nombre)){ i.tipo='existencia'; i.nuevos = +i.nuevos>0 ? 1 : 0; i.usados = +i.usados>0 ? 1 : 0; i.min=1; } });
   if(s.config && !s.config.minsV2){
     const M={'mangueras':2,'clavos':24,'figure 8':12,'tapones':12,'cinta asfáltica':1};
     (s.inventario||[]).forEach(i=>{ const k=String(i.nombre).toLowerCase().trim(); if(M[k]!==undefined) i.min=M[k]; });
@@ -330,6 +330,10 @@ function migrate(s){
       if(k==='tapones') i.min=6; });
     if(s.inventario && !s.inventario.some(i=>/arandela/i.test(i.nombre))) s.inventario.push({id:uid(), nombre:'Arandelas', unidad:'unidades', nuevos:0, usados:0, min:24});
     s.config.minsV3=1;
+  }
+  if(s.config && !s.config.minsV4){
+    (s.inventario||[]).forEach(i=>{ if(/^mangueras/i.test(i.nombre)) i.min=6; });
+    s.config.minsV4=1;
   }
   return s;
 }
@@ -397,7 +401,7 @@ function deviceAlerts(d){
   return a;
 }
 const disp = i => (+i.nuevos||0) + (+i.usados||0);   // usados = en buen estado, cuentan para el mínimo
-const lowStock = () => S.inventario.filter(i => disp(i) < +i.min);
+const lowStock = () => S.inventario.filter(i => i.tipo==='existencia' ? +i.nuevos<1 : disp(i) < +i.min);
 const openBuys = () => S.compras.filter(b => !['Recibida','Cancelada'].includes(b.estado));
 
 /* ============ RENDER ============ */
@@ -455,13 +459,15 @@ function renderDevices(){
 function renderInv(){
   $('invGrid').innerHTML = S.inventario.map(i => {
     if(i.tipo==='existencia'){
-      const hay = +i.nuevos > 0;
+      const stock = +i.nuevos > 0, uso = +i.usados > 0;
+      const row = (lbl, hint, val, k) => `<div class="counter"><div><div class="lbl">${lbl}</div><div class="hint">${hint}</div></div>
+        <div class="ctrl"><span class="num" style="font-size:16px;min-width:28px;color:${val?'var(--ok)':'var(--bad)'}">${val?'Sí':'No'}</span><button class="btn" style="white-space:nowrap;padding:5px 10px" onclick="toggleExist('${i.id}','${k}')">Cambiar</button></div></div>`;
       return `<div class="card inv-item">
-      <h3>${esc(i.nombre)} ${hay?'<span class="pill p-ok">Hay existencia</span>':'<span class="pill p-bad">Sin existencia</span>'}</h3>
-      <div class="counter"><div><div class="lbl">Existencia</div><div class="hint">Control sí / no (no se descuenta por uso)</div></div>
-        <div class="ctrl"><span class="num" style="font-size:16px">${hay?'Sí':'No'}</span></div></div>
+      <h3>${esc(i.nombre)} ${stock?'<span class="pill p-ok">OK</span>':'<span class="pill p-bad">Sin stock</span>'}</h3>
+      ${row('En uso','rollo abierto', uso, 'usados')}
+      ${row('En stock','repuesto en bodega', stock, 'nuevos')}
+      <div class="hint" style="margin-top:6px">Control sí / no. No se descuenta al registrar cambios de cinta.</div>
       <div class="actions">
-        <button class="btn ${hay?'':'primary'}" onclick="toggleExist('${i.id}')">${hay?'Marcar sin existencia':'Marcar con existencia'}</button>
         <button class="btn" onclick="openBuy(null,'${esc(i.nombre)}',1)">Agregar a compras</button>
       </div>
     </div>`;
@@ -618,7 +624,7 @@ function delLog(id){
 }
 
 /* ============ INVENTORY ============ */
-function toggleExist(id){ const i=S.inventario.find(x=>x.id===id); i.nuevos = +i.nuevos>0 ? 0 : 1; persist(); }
+function toggleExist(id,k){ const i=S.inventario.find(x=>x.id===id); i[k] = +i[k]>0 ? 0 : 1; persist(); }
 function adj(id, k, n){ const i=S.inventario.find(x=>x.id===id); i[k]=Math.max(0,(+i[k]||0)+n); persist(); }
 function openItem(id){
   const i = id ? S.inventario.find(x=>x.id===id) : {id:'',nombre:'',unidad:'unidades',nuevos:0,usados:0,min:0};
