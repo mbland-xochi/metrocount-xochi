@@ -229,7 +229,7 @@
         <div><label>Artículo</label><select id="lMat"></select></div>
         <div><label>Cantidad</label><input type="number" id="lCant" min="0" value="0"></div>
         <div><label>Condición</label><select id="lCond"><option value="nuevos">Nuevo</option><option value="usados">Usado</option></select></div>
-        <div><label>Material retirado (regresa como usado)</label><input type="number" id="lRet" min="0" value="0"></div>
+        <div><label>Retirado en buen estado (regresa como usado)</label><input type="number" id="lRet" min="0" value="0"></div>
       </div>
     </fieldset>
     <div class="full"><label>Notas / hallazgos</label><textarea id="lNotas"></textarea></div>
@@ -296,15 +296,16 @@ function defaultState(){
   return {
     devices: [1,2,3].map(n => ({id:'mc'+n, nombre:'MetroCount #'+n, serie:'', modelo:'', estado:'En bodega', ubicacion:'', mangueraA:'', mangueraB:'', cambiosCinta:0, fechaInstalacion:'', ultimaDescarga:'', memoria:'', ultimoMant:'', notas:''})),
     inventario: [
-      {id:uid(), nombre:'Mangueras', unidad:'unidades', nuevos:0, usados:0, min:2},
+      {id:uid(), nombre:'Mangueras mínimo de 10 m', unidad:'unidades', nuevos:0, usados:0, min:2},
       {id:uid(), nombre:'Clavos',    unidad:'unidades', nuevos:0, usados:0, min:24},
       {id:uid(), nombre:'Figure 8',  unidad:'unidades', nuevos:0, usados:0, min:12},
-      {id:uid(), nombre:'Tapones',   unidad:'unidades', nuevos:0, usados:0, min:12},
+      {id:uid(), nombre:'Tapones',   unidad:'unidades', nuevos:0, usados:0, min:6},
+      {id:uid(), nombre:'Arandelas', unidad:'unidades', nuevos:0, usados:0, min:24},
       {id:uid(), nombre:'Cinta asfáltica', unidad:'rollo', nuevos:0, usados:0, min:1, tipo:'existencia'},
     ],
     bitacora: [],
     compras: [],
-    config: {diasDescarga:7, cintaMax:5, diasMant:90, minsV2:1},
+    config: {diasDescarga:7, cintaMax:5, diasMant:90, minsV2:1, minsV3:1},
     updated: new Date().toISOString()
   };
 }
@@ -322,6 +323,13 @@ function migrate(s){
     const M={'mangueras':2,'clavos':24,'figure 8':12,'tapones':12,'cinta asfáltica':1};
     (s.inventario||[]).forEach(i=>{ const k=String(i.nombre).toLowerCase().trim(); if(M[k]!==undefined) i.min=M[k]; });
     s.config.minsV2=1;
+  }
+  if(s.config && !s.config.minsV3){
+    (s.inventario||[]).forEach(i=>{ const k=String(i.nombre).toLowerCase().trim();
+      if(k==='mangueras') i.nombre='Mangueras mínimo de 10 m';
+      if(k==='tapones') i.min=6; });
+    if(s.inventario && !s.inventario.some(i=>/arandela/i.test(i.nombre))) s.inventario.push({id:uid(), nombre:'Arandelas', unidad:'unidades', nuevos:0, usados:0, min:24});
+    s.config.minsV3=1;
   }
   return s;
 }
@@ -388,7 +396,8 @@ function deviceAlerts(d){
   else if(dm > c.diasMant) a.push(['p-warn',`Mantenimiento preventivo vencido (${dm} días)`]);
   return a;
 }
-const lowStock = () => S.inventario.filter(i => +i.nuevos < +i.min);
+const disp = i => (+i.nuevos||0) + (+i.usados||0);   // usados = en buen estado, cuentan para el mínimo
+const lowStock = () => S.inventario.filter(i => disp(i) < +i.min);
 const openBuys = () => S.compras.filter(b => !['Recibida','Cancelada'].includes(b.estado));
 
 /* ============ RENDER ============ */
@@ -457,15 +466,17 @@ function renderInv(){
       </div>
     </div>`;
     }
-    const low = +i.nuevos < +i.min;
+    const low = disp(i) < +i.min;
     return `<div class="card inv-item">
       <h3>${esc(i.nombre)} ${low?'<span class="pill p-bad">Bajo mínimo</span>':'<span class="pill p-ok">OK</span>'}</h3>
-      <div class="counter"><div><div class="lbl">Nuevos</div><div class="hint">mín. ${+i.min} ${esc(i.unidad)}</div></div>
+      <div class="counter"><div class="lbl">Nuevos</div>
         <div class="ctrl"><button class="btn mini" onclick="adj('${i.id}','nuevos',-1)">−</button><span class="num">${+i.nuevos}</span><button class="btn mini" onclick="adj('${i.id}','nuevos',1)">+</button></div></div>
-      <div class="counter"><div class="lbl">Usados</div>
+      <div class="counter"><div><div class="lbl">Usados</div><div class="hint">en buen estado</div></div>
         <div class="ctrl"><button class="btn mini" onclick="adj('${i.id}','usados',-1)">−</button><span class="num">${+i.usados}</span><button class="btn mini" onclick="adj('${i.id}','usados',1)">+</button></div></div>
+      <div class="counter"><div><div class="lbl"><strong style="color:var(--ink)">Disponible</strong></div><div class="hint">mín. ${+i.min} ${esc(i.unidad)}</div></div>
+        <div class="ctrl"><span class="num" style="color:${low?'var(--bad)':'var(--ok)'}">${disp(i)}</span></div></div>
       <div class="actions">
-        <button class="btn" onclick="openBuy(null,'${esc(i.nombre)}',${Math.max(1,(+i.min*2)-(+i.nuevos))})">Agregar a compras</button>
+        <button class="btn" onclick="openBuy(null,'${esc(i.nombre)}',${Math.max(1,(+i.min*2)-disp(i))})">Agregar a compras</button>
         <button class="btn" onclick="openItem('${i.id}')">Editar</button>
       </div>
     </div>`;
