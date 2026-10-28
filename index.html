@@ -337,9 +337,39 @@ function migrate(s){
   }
   return s;
 }
+/* ---- Compras automáticas: material en alerta → compra pendiente hasta el doble del mínimo ---- */
+function autoBuy(){
+  let changed=false;
+  const isOpen = b => !['Recibida','Cancelada'].includes(b.estado);
+  const match = (b,i) => b.itemId===i.id || String(b.item).toLowerCase().trim()===String(i.nombre).toLowerCase().trim();
+  (S.inventario||[]).forEach(i=>{
+    let alerta, cant, nota;
+    if(i.tipo==='existencia'){ alerta = +i.nuevos<1; cant = 1; nota = 'Sin rollo de repuesto en stock'; }
+    else { const n=(+i.nuevos||0)+(+i.usados||0), m=+i.min||0; alerta = n<m; cant = m*2-n; nota = `Disponible ${n}, mínimo ${m}, objetivo ${m*2}`; }
+    const open = S.compras.filter(b=>isOpen(b) && match(b,i));
+    const autoPend = open.find(b=>b.auto && b.estado==='Pendiente');
+    if(!alerta && i.autoSkip){ delete i.autoSkip; changed=true; }
+    if(alerta && i.autoSkip) return;   // el usuario canceló/eliminó la compra automática
+    if(alerta){
+      if(autoPend){
+        if(+autoPend.cantidad!==cant || autoPend.item!==i.nombre){ autoPend.cantidad=cant; autoPend.item=i.nombre; changed=true; }
+        const nt='Automática: '+nota; if(autoPend.notas!==nt){ autoPend.notas=nt; changed=true; }
+      } else if(!open.length){
+        S.compras.push({id:uid(), itemId:i.id, item:i.nombre, cantidad:cant, prioridad:'Alta', estado:'Pendiente', fecha:today(), proveedor:'', oc:'', notas:'Automática: '+nota, auto:true});
+        changed=true;
+      }
+    } else if(autoPend){
+      S.compras = S.compras.filter(b=>b!==autoPend); changed=true;   // ya no está en alerta y aún no se había solicitado
+    }
+  });
+  return changed;
+}
+
 migrate(S);
+if(autoBuy()){ try { localStorage.setItem(LS_KEY, JSON.stringify(S)); } catch(e){} }
 
 function persist(){
+  autoBuy();
   S.updated = new Date().toISOString();
   try { localStorage.setItem(LS_KEY, JSON.stringify(S)); } catch(e){}
   push();
@@ -370,9 +400,11 @@ async function pull(){
     const j = await r.json();
     if(j.ok && j.data && j.data.devices && j.data.devices.length){
       S = migrate(Object.assign(defaultState(), j.data));
+      const ch = autoBuy();
       try { localStorage.setItem(LS_KEY, JSON.stringify(S)); } catch(e){}
       renderAll();
       setSync('ok','Sincronizado');
+      if(ch) push();
     } else if(j.ok){ push(); }
     else throw new Error(j.error);
   }catch(e){ setSync('err','Sin conexión (datos locales)'); }
@@ -472,15 +504,17 @@ function renderInv(){
       </div>
     </div>`;
     }
-    const low = disp(i) < +i.min;
+    const n = disp(i), m = +i.min;
+    const low = n < m, warn = !low && n < m*2;
+    const lvl = low ? ['p-bad','Alerta','var(--bad)'] : warn ? ['p-warn','Advertencia','var(--warn)'] : ['p-ok','OK','var(--ok)'];
     return `<div class="card inv-item">
-      <h3>${esc(i.nombre)} ${low?'<span class="pill p-bad">Bajo mínimo</span>':'<span class="pill p-ok">OK</span>'}</h3>
+      <h3>${esc(i.nombre)} <span class="pill ${lvl[0]}">${lvl[1]}</span></h3>
       <div class="counter"><div class="lbl">Nuevos</div>
         <div class="ctrl"><button class="btn mini" onclick="adj('${i.id}','nuevos',-1)">−</button><span class="num">${+i.nuevos}</span><button class="btn mini" onclick="adj('${i.id}','nuevos',1)">+</button></div></div>
       <div class="counter"><div><div class="lbl">Usados</div><div class="hint">en buen estado</div></div>
         <div class="ctrl"><button class="btn mini" onclick="adj('${i.id}','usados',-1)">−</button><span class="num">${+i.usados}</span><button class="btn mini" onclick="adj('${i.id}','usados',1)">+</button></div></div>
-      <div class="counter"><div><div class="lbl"><strong style="color:var(--ink)">Disponible</strong></div><div class="hint">mín. ${+i.min} ${esc(i.unidad)}</div></div>
-        <div class="ctrl"><span class="num" style="color:${low?'var(--bad)':'var(--ok)'}">${disp(i)}</span></div></div>
+      <div class="counter"><div><div class="lbl"><strong style="color:var(--ink)">Disponible</strong></div><div class="hint">mín. ${m} · óptimo ${m*2}+ ${esc(i.unidad)}</div></div>
+        <div class="ctrl"><span class="num" style="color:${lvl[2]}">${n}</span></div></div>
       <div class="actions">
         <button class="btn" onclick="openBuy(null,'${esc(i.nombre)}',${Math.max(1,(+i.min*2)-disp(i))})">Agregar a compras</button>
         <button class="btn" onclick="openItem('${i.id}')">Editar</button>
@@ -517,10 +551,10 @@ function renderBuy(){
   const pp = p => ({Alta:'p-bad',Media:'p-warn',Baja:'p-gray'}[p]);
   const ep = e => ({Pendiente:'p-warn',Solicitada:'p-info',Aprobada:'p-info','En camino':'p-info',Recibida:'p-ok',Cancelada:'p-gray'}[e]);
   $('buyBody').innerHTML = rows.map(b=>`<tr>
-    <td><strong>${esc(b.item)}</strong>${b.oc?`<br><span class="hint">OC/Req: ${esc(b.oc)}</span>`:''}</td><td>${+b.cantidad}</td>
+    <td><strong>${esc(b.item)}</strong>${b.auto?' <span class="pill p-info" style="font-size:11px">Auto</span>':''}${b.oc?`<br><span class="hint">OC/Req: ${esc(b.oc)}</span>`:''}</td><td>${+b.cantidad}</td>
     <td><span class="pill ${pp(b.prioridad)}">${esc(b.prioridad)}</span></td>
     <td><span class="pill ${ep(b.estado)}">${esc(b.estado)}</span></td>
-    <td>${esc(b.proveedor)}</td><td style="white-space:nowrap">${fmt(b.fecha)}${b.fecha&&!['Recibida','Cancelada'].includes(b.estado)?`<br><span class="hint">hace ${daysSince(b.fecha)} d</span>`:''}</td>
+    <td>${esc(b.proveedor)}</td><td style="white-space:nowrap">${fmt(b.fecha)}${b.fecha&&!['Recibida','Cancelada'].includes(b.estado)?`<br><span class="hint">${(n=>n<=0?'hoy':n===1?'hace 1 día':'hace '+n+' días')(daysSince(b.fecha))}</span>`:''}</td>
     <td>${esc(b.notas)}</td>
     <td style="white-space:nowrap">${!['Recibida','Cancelada'].includes(b.estado)?`<button class="btn" onclick="receive('${b.id}')">Recibida</button> `:''}<button class="btn" onclick="openBuy('${b.id}')">Editar</button></td></tr>`).join('')
     || '<tr><td colspan="8" class="empty">Sin compras en esta vista</td></tr>';
@@ -658,7 +692,10 @@ function saveBuy(e){
   const v={item:$('bItem').value.trim(), cantidad:+$('bCant').value||1, prioridad:$('bPrio').value, estado:$('bEst').value, fecha:$('bFecha').value, proveedor:$('bProv').value.trim(), oc:$('bOC').value.trim(), notas:$('bNotas').value.trim()};
   const becameReceived = v.estado==='Recibida' && (!prev || prev.estado!=='Recibida');
   let b;
-  if(prev){ Object.assign(prev,v); b=prev; } else { b={id:uid(),...v}; S.compras.push(b); }
+  if(prev){
+    if(prev.auto){ if(v.estado==='Cancelada') skipAuto(prev); prev.auto=false; }   // editada a mano: ya no se recalcula sola
+    Object.assign(prev,v); b=prev;
+  } else { b={id:uid(),...v}; S.compras.push(b); }
   if(becameReceived) addToStock(b);
   persist(); return true;
 }
@@ -676,8 +713,10 @@ function addToStock(b){
 }
 function delBuy(){
   if(!confirm('¿Eliminar esta compra?')) return;
+  const b=S.compras.find(x=>x.id===$('bId').value); if(b && b.auto) skipAuto(b);
   S.compras = S.compras.filter(x=>x.id!==$('bId').value); $('dlgBuy').close(); persist();
 }
+function skipAuto(b){ const i=S.inventario.find(x=>x.id===b.itemId); if(i) i.autoSkip=1; }
 
 /* ============ SETTINGS / EXPORT ============ */
 function saveCfg(){ S.config={...S.config, diasDescarga:+$('cfgDesc').value||7, cintaMax:+$('cfgCinta').value||5, diasMant:+$('cfgMant').value||90}; persist(); alert('Ajustes guardados'); }
