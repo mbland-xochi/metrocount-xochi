@@ -278,7 +278,7 @@ const TIPOS = {
   'Instalación':            'Pone el equipo "En uso", actualiza ubicación y mangueras A y B, reinicia el conteo de cambios de cinta.',
   'Retiro':                 'Pasa el equipo a "En bodega".',
   'Descarga de datos':      'Actualiza la fecha de última descarga.',
-  'Cambio de cinta':        'Suma 1 al conteo de cambios de cinta. No descuenta cinta asfáltica del inventario.',
+  'Cambio de cinta':        'Suma 1 al conteo de cambios de cinta y cuenta como mantenimiento preventivo. No descuenta cinta asfáltica del inventario.',
   'Cambio de manguera':     'Cambia la Manguera A, la B o ambas. Si cambian ambas, reinicia el conteo de cinta.',
   'Cambio de batería':      'Registra el cambio de batería como mantenimiento.',
   'Inspección en campo':    'Registro de revisión visual (mangueras, clavos, figure 8, tapones).',
@@ -290,7 +290,7 @@ const TIPOS = {
 
 /* ============ STATE ============ */
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,6);
-const today = () => new Date().toISOString().slice(0,10);
+const today = () => { const d=new Date(); return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10); };  // fecha local (no UTC)
 
 function defaultState(){
   return {
@@ -418,6 +418,8 @@ const daysSince = d => d ? Math.floor((Date.now() - new Date(d+'T12:00:00')) / 8
 const devName = id => (S.devices.find(d=>d.id===id)||{}).nombre || id;
 const estadoPill = e => ({'En uso':'p-ok','En bodega':'p-gray','En mantenimiento':'p-warn','Fuera de servicio':'p-bad'}[e]||'p-gray');
 
+// Memoria: 0–49 OK (verde), 50–74 Advertencia (amarillo), 75–100 Alerta (rojo)
+function memLevel(v){ if(v===''||v==null) return null; v=+v; return v>=75?['p-bad','Alerta']:v>=50?['p-warn','Advertencia']:['p-ok','OK']; }
 function deviceAlerts(d){
   const a=[], c=S.config;
   if(d.estado==='En uso'){
@@ -426,7 +428,9 @@ function deviceAlerts(d){
     else if(ds > c.diasDescarga) a.push(['p-bad',`${ds} días sin descargar datos`]);
     if(+d.cambiosCinta >= c.cintaMax) a.push(['p-warn',`${d.cambiosCinta} cambios de cinta: revisar estado de mangueras`]);
   }
-  if(d.memoria!=='' && +d.memoria >= 80) a.push(['p-bad',`Memoria casi llena (${d.memoria}%): descargar datos`]);
+  const mem = memLevel(d.memoria);
+  if(mem && mem[0]==='p-bad')  a.push(['p-bad', `Alerta: memoria al ${d.memoria}%, descargar datos`]);
+  if(mem && mem[0]==='p-warn') a.push(['p-warn',`Advertencia: memoria al ${d.memoria}%, programar descarga`]);
   const dm = daysSince(d.ultimoMant);
   if(dm===null) a.push(['p-info','Sin mantenimiento preventivo registrado']);
   else if(dm > c.diasMant) a.push(['p-warn',`Mantenimiento preventivo vencido (${dm} días)`]);
@@ -473,7 +477,7 @@ function renderDevices(){
         <dt>Cambios de cinta</dt><dd>${+d.cambiosCinta||0}</dd>
         <dt>Instalado</dt><dd>${fmt(d.fechaInstalacion)}</dd>
         <dt>Última descarga</dt><dd>${fmt(d.ultimaDescarga)}${ds!==null?` <span style="color:var(--muted);font-weight:400">(${ds===0?'hoy':ds===1?'hace 1 día':'hace '+ds+' días'})</span>`:''}</dd>
-        <dt>Memoria</dt><dd>${d.memoria!==''?esc(d.memoria)+'%':'—'}</dd>
+        <dt>Memoria</dt><dd>${(m=>m?`<span class="pill ${m[0]}">${esc(d.memoria)}% · ${m[1]}</span>`:'—')(memLevel(d.memoria))}</dd>
         <dt>Últ. mant. prev.</dt><dd>${fmt(d.ultimoMant)}${dm!==null?` <span style="color:var(--muted);font-weight:400">(${dm===0?'hoy':dm===1?'hace 1 día':'hace '+dm+' días'})</span>`:''}</dd>
         ${d.serie?`<dt>Serie</dt><dd>${esc(d.serie)}</dd>`:''}
       </dl>
@@ -638,7 +642,7 @@ function saveLog(e){
     case 'Instalación': d.estado='En uso'; d.fechaInstalacion=l.fecha; d.cambiosCinta=0; if(l.ubicacion) d.ubicacion=l.ubicacion; if(l.mangueraA) d.mangueraA=l.mangueraA; if(l.mangueraB) d.mangueraB=l.mangueraB; break;
     case 'Retiro': d.estado='En bodega'; break;
     case 'Descarga de datos': if(later(d.ultimaDescarga,l.fecha)) d.ultimaDescarga=l.fecha; break;
-    case 'Cambio de cinta': d.cambiosCinta=(+d.cambiosCinta||0)+1; break;
+    case 'Cambio de cinta': d.cambiosCinta=(+d.cambiosCinta||0)+1; if(later(d.ultimoMant,l.fecha)) d.ultimoMant=l.fecha; break;
     case 'Cambio de manguera':
       if(l.lado.includes('A') && l.mangueraA) d.mangueraA=l.mangueraA;
       if(l.lado.includes('B') && l.mangueraB) d.mangueraB=l.mangueraB;
