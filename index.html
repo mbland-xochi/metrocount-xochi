@@ -428,9 +428,6 @@ function deviceAlerts(d){
     else if(ds > c.diasDescarga) a.push(['p-bad',`${ds} días sin descargar datos`]);
     if(+d.cambiosCinta >= c.cintaMax) a.push(['p-warn',`${d.cambiosCinta} cambios de cinta: revisar estado de mangueras`]);
   }
-  const mem = memLevel(d.memoria);
-  if(mem && mem[0]==='p-bad')  a.push(['p-bad', `Alerta: memoria al ${d.memoria}%, descargar datos`]);
-  if(mem && mem[0]==='p-warn') a.push(['p-warn',`Advertencia: memoria al ${d.memoria}%, programar descarga`]);
   const dm = daysSince(d.ultimoMant);
   if(dm===null) a.push(['p-info','Sin mantenimiento preventivo registrado']);
   else if(dm > c.diasMant) a.push(['p-warn',`Mantenimiento preventivo vencido (${dm} días)`]);
@@ -451,7 +448,7 @@ function renderBadges(){
 
 function renderKpis(){
   const enUso = S.devices.filter(d=>d.estado==='En uso').length;
-  const al = S.devices.reduce((n,d)=>n+deviceAlerts(d).filter(a=>a[0]!=='p-info').length,0);
+  const al = S.devices.reduce((n,d)=>n+deviceAlerts(d).filter(a=>a[0]!=='p-info').length+((memLevel(d.memoria)||[])[0]==='p-bad'?1:0),0);
   const mes = today().slice(0,7);
   const act = S.bitacora.filter(l=>l.fecha.startsWith(mes)).length;
   $('kpis').innerHTML = [
