@@ -414,7 +414,9 @@ async function pull(){
 const $ = id => document.getElementById(id);
 const esc = s => String(s??'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fmt = d => d ? new Date(d+'T12:00:00').toLocaleDateString('es-GT',{day:'2-digit',month:'short',year:'numeric'}) : '—';
-const daysSince = d => d ? Math.floor((Date.now() - new Date(d+'T12:00:00')) / 86400000) : null;
+// Días calendario entre la fecha registrada y hoy (hora local): hoy = 0, ayer = 1
+const daysSince = d => { if(!d) return null; const [y,m,dd]=String(d).slice(0,10).split('-').map(Number); const a=new Date(y,m-1,dd); const t=new Date(); t.setHours(0,0,0,0); return Math.max(0, Math.round((t-a)/86400000)); };
+const ago = n => n===0 ? 'hoy' : n===1 ? 'hace 1 día' : 'hace '+n+' días';
 const devName = id => (S.devices.find(d=>d.id===id)||{}).nombre || id;
 const estadoPill = e => ({'En uso':'p-ok','En bodega':'p-gray','En mantenimiento':'p-warn','Fuera de servicio':'p-bad'}[e]||'p-gray');
 
@@ -473,9 +475,9 @@ function renderDevices(){
         <dt>Manguera B</dt><dd>${esc(d.mangueraB)||'—'}</dd>
         <dt>Cambios de cinta</dt><dd>${+d.cambiosCinta||0}</dd>
         <dt>Instalado</dt><dd>${fmt(d.fechaInstalacion)}</dd>
-        <dt>Última descarga</dt><dd>${fmt(d.ultimaDescarga)}${ds!==null?` <span style="color:var(--muted);font-weight:400">(${ds===0?'hoy':ds===1?'hace 1 día':'hace '+ds+' días'})</span>`:''}</dd>
+        <dt>Última descarga</dt><dd>${fmt(d.ultimaDescarga)}${ds!==null?` <span style="color:var(--muted);font-weight:400">(${ago(ds)})</span>`:''}</dd>
         <dt>Memoria</dt><dd>${(m=>m?`<span class="pill ${m[0]}">${esc(d.memoria)}% · ${m[1]}</span>`:'—')(memLevel(d.memoria))}</dd>
-        <dt>Últ. mant. prev.</dt><dd>${fmt(d.ultimoMant)}${dm!==null?` <span style="color:var(--muted);font-weight:400">(${dm===0?'hoy':dm===1?'hace 1 día':'hace '+dm+' días'})</span>`:''}</dd>
+        <dt>Últ. mant. prev.</dt><dd>${fmt(d.ultimoMant)}${dm!==null?` <span style="color:var(--muted);font-weight:400">(${ago(dm)})</span>`:''}</dd>
         ${d.serie?`<dt>Serie</dt><dd>${esc(d.serie)}</dd>`:''}
       </dl>
       ${al.length?`<div class="alerts">${al.map(a=>`<div class="alert ${a[0]}">${a[1]}</div>`).join('')}</div>`:''}
@@ -555,7 +557,7 @@ function renderBuy(){
     <td><strong>${esc(b.item)}</strong>${b.auto?' <span class="pill p-info" style="font-size:11px">Auto</span>':''}${b.oc?`<br><span class="hint">OC/Req: ${esc(b.oc)}</span>`:''}</td><td>${+b.cantidad}</td>
     <td><span class="pill ${pp(b.prioridad)}">${esc(b.prioridad)}</span></td>
     <td><span class="pill ${ep(b.estado)}">${esc(b.estado)}</span></td>
-    <td>${esc(b.proveedor)}</td><td style="white-space:nowrap">${fmt(b.fecha)}${b.fecha&&!['Recibida','Cancelada'].includes(b.estado)?`<br><span class="hint">${(n=>n<=0?'hoy':n===1?'hace 1 día':'hace '+n+' días')(daysSince(b.fecha))}</span>`:''}</td>
+    <td>${esc(b.proveedor)}</td><td style="white-space:nowrap">${fmt(b.fecha)}${b.fecha&&!['Recibida','Cancelada'].includes(b.estado)?`<br><span class="hint">${ago(daysSince(b.fecha))}</span>`:''}</td>
     <td>${esc(b.notas)}</td>
     <td style="white-space:nowrap">${!['Recibida','Cancelada'].includes(b.estado)?`<button class="btn" onclick="receive('${b.id}')">Recibida</button> `:''}<button class="btn" onclick="openBuy('${b.id}')">Editar</button></td></tr>`).join('')
     || '<tr><td colspan="8" class="empty">Sin compras en esta vista</td></tr>';
