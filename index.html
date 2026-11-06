@@ -39,6 +39,9 @@
   .p-gray{background:#eee;color:#555}
   dl{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;margin:0;font-size:14px}
   dt{color:var(--muted)} dd{margin:0;font-weight:500}
+  dd.chg{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .chg-btn{padding:2px 9px!important;font-size:12px!important;line-height:1.4}
+  .chg-flag{cursor:pointer;letter-spacing:.04em;border:1px solid var(--bad)}
   .alerts{margin-top:10px;display:flex;flex-direction:column;gap:6px}
   .alert{font-size:13px;padding:6px 10px;border-radius:8px}
   .actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
@@ -222,6 +225,8 @@
       <div id="lMAWrap"><label>Nueva Manguera A (ID)</label><input id="lMA"></div>
       <div id="lMBWrap"><label>Nueva Manguera B (ID)</label><input id="lMB"></div>
     </div></div>
+    <div id="lStopWrap"><label>¿Se hizo STOP y SETUP?</label><select id="lStop" onchange="stopSetup()"><option value="">— Seleccionar —</option><option>Sí</option><option>No</option></select>
+      <div class="hint">Si es Sí, la memoria se reinicia a 0%.</div></div>
     <div id="lBatWrap"><label>Memoria usada (%)</label><input type="number" id="lBat" min="0" max="100"></div>
     <div class="full"><label>Responsable</label><input id="lResp" required></div>
     <fieldset class="full"><legend>Material utilizado (descuenta del inventario)</legend>
@@ -277,7 +282,7 @@ const LS_API = 'xochi_metrocount_api';
 const TIPOS = {
   'Instalación':            'Pone el equipo "En uso", actualiza ubicación y mangueras A y B, reinicia el conteo de cambios de cinta.',
   'Retiro':                 'Pasa el equipo a "En bodega".',
-  'Descarga de datos':      'Actualiza la fecha de última descarga.',
+  'Descarga de datos':      'Actualiza la fecha de última descarga. Si se hizo STOP y SETUP, reinicia la memoria a 0%.',
   'Cambio de cinta':        'Suma 1 al conteo de cambios de cinta y cuenta como mantenimiento preventivo. No descuenta cinta asfáltica del inventario.',
   'Cambio de manguera':     'Cambia la Manguera A, la B o ambas. Si cambian ambas, reinicia el conteo de cinta.',
   'Cambio de batería':      'Registra el cambio de batería como mantenimiento.',
@@ -422,6 +427,15 @@ const estadoPill = e => ({'En uso':'p-ok','En bodega':'p-gray','En mantenimiento
 
 // Memoria: 0–49 OK (verde), 50–74 Advertencia (amarillo), 75–100 Alerta (rojo)
 function memLevel(v){ if(v===''||v==null) return null; v=+v; return v>=75?['p-bad','Alerta']:v>=50?['p-warn','Advertencia']:['p-ok','OK']; }
+// Marcas de cambio pendiente (guardan la fecha en que se marcaron; vacío = sin marca)
+const CHG = { cambiarA:['Cambio de manguera','A'], cambiarB:['Cambio de manguera','B'], cambiarCinta:['Cambio de cinta',''] };
+function chgCtl(d,k){
+  return d[k]
+    ? `<span class="pill p-bad chg-flag" title="Marcado ${fmt(d[k])}. Clic para registrar el cambio" onclick="openLog('${d.id}','${CHG[k][0]}','${CHG[k][1]}')">CAMBIAR</span>`
+    : `<button class="btn chg-btn" onclick="markChange('${d.id}','${k}')">Cambiar</button>`;
+}
+function markChange(id,k){ const d=S.devices.find(x=>x.id===id); d[k]=today(); persist(); }
+const pendingChanges = d => Object.keys(CHG).filter(k=>d[k]).length;
 function deviceAlerts(d){
   const a=[], c=S.config;
   if(d.estado==='En uso'){
@@ -450,7 +464,7 @@ function renderBadges(){
 
 function renderKpis(){
   const enUso = S.devices.filter(d=>d.estado==='En uso').length;
-  const al = S.devices.reduce((n,d)=>n+deviceAlerts(d).filter(a=>a[0]!=='p-info').length+((memLevel(d.memoria)||[])[0]==='p-bad'?1:0),0);
+  const al = S.devices.reduce((n,d)=>n+deviceAlerts(d).filter(a=>a[0]!=='p-info').length+((memLevel(d.memoria)||[])[0]==='p-bad'?1:0)+pendingChanges(d),0);
   const mes = today().slice(0,7);
   const act = S.bitacora.filter(l=>l.fecha.startsWith(mes)).length;
   $('kpis').innerHTML = [
@@ -471,9 +485,9 @@ function renderDevices(){
       <div class="dev-head"><h3>${esc(d.nombre)}</h3><span class="pill ${estadoPill(d.estado)}">${esc(d.estado)}</span></div>
       <dl>
         <dt>Ubicación</dt><dd>${esc(d.ubicacion)||'—'}</dd>
-        <dt>Manguera A</dt><dd>${esc(d.mangueraA)||'—'}</dd>
-        <dt>Manguera B</dt><dd>${esc(d.mangueraB)||'—'}</dd>
-        <dt>Cambios de cinta</dt><dd>${+d.cambiosCinta||0}</dd>
+        <dt>Manguera A</dt><dd class="chg">${esc(d.mangueraA)||'—'} ${chgCtl(d,'cambiarA')}</dd>
+        <dt>Manguera B</dt><dd class="chg">${esc(d.mangueraB)||'—'} ${chgCtl(d,'cambiarB')}</dd>
+        <dt>Cambios de cinta</dt><dd class="chg">${+d.cambiosCinta||0} ${chgCtl(d,'cambiarCinta')}</dd>
         <dt>Instalado</dt><dd>${fmt(d.fechaInstalacion)}</dd>
         <dt>Última descarga</dt><dd>${fmt(d.ultimaDescarga)}${ds!==null?` <span style="color:var(--muted);font-weight:400">(${ago(ds)})</span>`:''}</dd>
         <dt>Memoria</dt><dd>${(m=>m?`<span class="pill ${m[0]}">${esc(d.memoria)}% · ${m[1]}</span>`:'—')(memLevel(d.memoria))}</dd>
@@ -538,7 +552,7 @@ function renderLog(){
   const rows = S.bitacora.filter(l => (!fd||l.dispositivo===fd) && (!ft||l.tipo===ft) && (!fm||l.fecha.startsWith(fm)))
     .sort((a,b)=> (b.fecha+b.ts).localeCompare(a.fecha+a.ts));
   $('logBody').innerHTML = rows.map(l=>`<tr>
-    <td style="white-space:nowrap">${fmt(l.fecha)}</td><td>${esc(devName(l.dispositivo))}</td><td>${esc(l.tipo)}</td>
+    <td style="white-space:nowrap">${fmt(l.fecha)}</td><td>${esc(devName(l.dispositivo))}</td><td>${esc(l.tipo)}${l.lado&&l.tipo==='Cambio de manguera'?` (${l.lado==='AB'?'A y B':esc(l.lado)})`:''}${l.stopSetup?`<br><span class="hint">STOP y SETUP: ${esc(l.stopSetup)}</span>`:''}</td>
     <td>${esc(l.ubicacion)}</td><td>${esc(l.responsable)}</td>
     <td>${l.matCant>0?`${l.matCant} ${esc(l.matItem)} (${l.matCond==='nuevos'?'nuevo':'usado'})`:''}${l.matRet>0?`<br><span class="hint">Retirado: ${l.matRet}</span>`:''}</td>
     <td>${esc(l.notas)}</td>
@@ -585,12 +599,12 @@ function saveDev(e){
 }
 
 /* ============ LOG ============ */
-function openLog(devId, tipo){
+function openLog(devId, tipo, lado){
   $('lDev').innerHTML = S.devices.map(d=>`<option value="${d.id}">${esc(d.nombre)}</option>`).join('');
   $('lTipo').innerHTML = Object.keys(TIPOS).map(t=>`<option>${t}</option>`).join('');
   $('lMat').innerHTML = '<option value="">— Ninguno —</option>' + S.inventario.filter(i=>i.tipo!=='existencia').map(i=>`<option value="${i.id}">${esc(i.nombre)}</option>`).join('');
   $('lFecha').value=today(); if(devId) $('lDev').value=devId; if(tipo) $('lTipo').value=tipo;
-  ['lUbic','lMA','lMB','lBat','lNotas'].forEach(i=>$(i).value=''); $('lLado').value='A'; $('lCant').value=0; $('lRet').value=0;
+  ['lUbic','lMA','lMB','lBat','lNotas'].forEach(i=>$(i).value=''); $('lLado').value=lado||'A'; $('lCant').value=0; $('lRet').value=0; $('lStop').value=''; $('lBat').disabled=false;
   try{ $('lResp').value = localStorage.getItem('xochi_mc_resp')||''; }catch(e){}
   logHint(); $('dlgLog').showModal();
 }
@@ -606,15 +620,24 @@ function logHint(){
   const dv=S.devices.find(x=>x.id===$('lDev').value);
   if(t==='Instalación' && dv){ if(!$('lMA').value) $('lMA').value=dv.mangueraA||''; if(!$('lMB').value) $('lMB').value=dv.mangueraB||''; }
   $('lBatWrap').style.display  = ['Descarga de datos','Mantenimiento preventivo','Inspección en campo'].includes(t)?'':'none';
+  const isDesc = t==='Descarga de datos';
+  $('lStopWrap').style.display = isDesc?'':'none'; $('lStop').required = isDesc;
+  if(!isDesc){ $('lStop').value=''; $('lBat').disabled=false; }
   if(t==='Instalación' || t==='Inspección en campo' || t==='Descarga de datos'){
     const d=S.devices.find(x=>x.id===$('lDev').value); if(d && !$('lUbic').value) $('lUbic').value=d.ubicacion||'';
   }
+}
+function stopSetup(){
+  const si = $('lStop').value==='Sí';
+  $('lBat').disabled = si;
+  if(si) $('lBat').value = 0; else if($('lBat').value==='0') $('lBat').value='';
 }
 function saveLog(e){
   if(e.submitter && e.submitter.value!=='ok') return true;
   const l = {id:uid(), ts:new Date().toISOString(), fecha:$('lFecha').value, dispositivo:$('lDev').value, tipo:$('lTipo').value,
     ubicacion:$('lUbic').value.trim(), lado:'', mangueraA:'', mangueraB:'', memoria:$('lBat').value,
-    responsable:$('lResp').value.trim(), notas:$('lNotas').value.trim(), matItem:'', matCant:+$('lCant').value||0, matCond:$('lCond').value, matRet:+$('lRet').value||0};
+    responsable:$('lResp').value.trim(), notas:$('lNotas').value.trim(), matItem:'', matCant:+$('lCant').value||0, matCond:$('lCond').value, matRet:+$('lRet').value||0, stopSetup:''};
+  if(l.tipo==='Descarga de datos'){ l.stopSetup=$('lStop').value; if(l.stopSetup==='Sí') l.memoria='0'; }
   try{ localStorage.setItem('xochi_mc_resp', l.responsable); }catch(e){}
   if(l.tipo==='Instalación' || l.tipo==='Cambio de manguera'){
     l.lado = l.tipo==='Instalación' ? 'AB' : $('lLado').value;
@@ -638,13 +661,13 @@ function saveLog(e){
   // Efectos en el equipo
   const later = (a,b) => !a || b >= a;
   switch(l.tipo){
-    case 'Instalación': d.estado='En uso'; d.fechaInstalacion=l.fecha; d.cambiosCinta=0; if(l.ubicacion) d.ubicacion=l.ubicacion; if(l.mangueraA) d.mangueraA=l.mangueraA; if(l.mangueraB) d.mangueraB=l.mangueraB; break;
+    case 'Instalación': d.estado='En uso'; d.fechaInstalacion=l.fecha; d.cambiosCinta=0; d.cambiarA=''; d.cambiarB=''; d.cambiarCinta=''; if(l.ubicacion) d.ubicacion=l.ubicacion; if(l.mangueraA) d.mangueraA=l.mangueraA; if(l.mangueraB) d.mangueraB=l.mangueraB; break;
     case 'Retiro': d.estado='En bodega'; break;
     case 'Descarga de datos': if(later(d.ultimaDescarga,l.fecha)) d.ultimaDescarga=l.fecha; break;
-    case 'Cambio de cinta': d.cambiosCinta=(+d.cambiosCinta||0)+1; if(later(d.ultimoMant,l.fecha)) d.ultimoMant=l.fecha; break;
+    case 'Cambio de cinta': d.cambiarCinta=''; d.cambiosCinta=(+d.cambiosCinta||0)+1; if(later(d.ultimoMant,l.fecha)) d.ultimoMant=l.fecha; break;
     case 'Cambio de manguera':
-      if(l.lado.includes('A') && l.mangueraA) d.mangueraA=l.mangueraA;
-      if(l.lado.includes('B') && l.mangueraB) d.mangueraB=l.mangueraB;
+      if(l.lado.includes('A')){ d.cambiarA=''; if(l.mangueraA) d.mangueraA=l.mangueraA; }
+      if(l.lado.includes('B')){ d.cambiarB=''; if(l.mangueraB) d.mangueraB=l.mangueraB; }
       if(l.lado==='AB') d.cambiosCinta=0;
       break;
     case 'Cambio de batería': if(later(d.ultimoMant,l.fecha)) d.ultimoMant=l.fecha; break;
@@ -734,8 +757,8 @@ function exportCSV(which){
   const csvq = v => `"${String(v??'').replace(/"/g,'""')}"`;
   let head, rows;
   if(which==='bitacora'){
-    head=['Fecha','Equipo','Actividad','Ubicación','Manguera cambiada','Manguera A','Manguera B','Memoria (%)','Responsable','Material','Cantidad','Condición','Retirado','Notas'];
-    rows=S.bitacora.map(l=>[l.fecha,devName(l.dispositivo),l.tipo,l.ubicacion,l.lado||'',l.mangueraA||'',l.mangueraB||'',l.memoria??'',l.responsable,l.matItem,l.matCant,l.matCond,l.matRet,l.notas]);
+    head=['Fecha','Equipo','Actividad','Ubicación','Manguera cambiada','Manguera A','Manguera B','Memoria (%)','STOP y SETUP','Responsable','Material','Cantidad','Condición','Retirado','Notas'];
+    rows=S.bitacora.map(l=>[l.fecha,devName(l.dispositivo),l.tipo,l.ubicacion,l.lado||'',l.mangueraA||'',l.mangueraB||'',l.memoria??'',l.stopSetup||'',l.responsable,l.matItem,l.matCant,l.matCond,l.matRet,l.notas]);
   } else {
     head=['Artículo','Cantidad','Prioridad','Estado','Proveedor','OC/Req','Fecha solicitud','Fecha recibida','Notas'];
     rows=S.compras.map(b=>[b.item,b.cantidad,b.prioridad,b.estado,b.proveedor,b.oc,b.fecha,b.fechaRecibida,b.notas]);
