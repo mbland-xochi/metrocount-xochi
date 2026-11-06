@@ -484,15 +484,15 @@ function renderDevices(){
     return `<div class="card">
       <div class="dev-head"><h3>${esc(d.nombre)}</h3><span class="pill ${estadoPill(d.estado)}">${esc(d.estado)}</span></div>
       <dl>
+        <dt>Serie</dt><dd>${esc(d.serie)||'—'}</dd>
+        <dt>Instalado</dt><dd>${fmt(d.fechaInstalacion)}</dd>
         <dt>Ubicación</dt><dd>${esc(d.ubicacion)||'—'}</dd>
         <dt>Manguera A</dt><dd class="chg">${esc(d.mangueraA)||'—'} ${chgCtl(d,'cambiarA')}</dd>
         <dt>Manguera B</dt><dd class="chg">${esc(d.mangueraB)||'—'} ${chgCtl(d,'cambiarB')}</dd>
         <dt>Cambios de cinta</dt><dd class="chg">${+d.cambiosCinta||0} ${chgCtl(d,'cambiarCinta')}</dd>
-        <dt>Instalado</dt><dd>${fmt(d.fechaInstalacion)}</dd>
+        <dt>Últ. mant. prev.</dt><dd>${fmt(d.ultimoMant)}${dm!==null?` <span style="color:var(--muted);font-weight:400">(${ago(dm)})</span>`:''}</dd>
         <dt>Última descarga</dt><dd>${fmt(d.ultimaDescarga)}${ds!==null?` <span style="color:var(--muted);font-weight:400">(${ago(ds)})</span>`:''}</dd>
         <dt>Memoria</dt><dd>${(m=>m?`<span class="pill ${m[0]}">${esc(d.memoria)}% · ${m[1]}</span>`:'—')(memLevel(d.memoria))}</dd>
-        <dt>Últ. mant. prev.</dt><dd>${fmt(d.ultimoMant)}${dm!==null?` <span style="color:var(--muted);font-weight:400">(${ago(dm)})</span>`:''}</dd>
-        ${d.serie?`<dt>Serie</dt><dd>${esc(d.serie)}</dd>`:''}
       </dl>
       ${al.length?`<div class="alerts">${al.map(a=>`<div class="alert ${a[0]}">${a[1]}</div>`).join('')}</div>`:''}
       <div class="actions">
