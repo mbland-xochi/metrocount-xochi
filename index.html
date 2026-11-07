@@ -1,4 +1,4 @@
-<!DOCTYPE html> 
+<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -159,9 +159,6 @@
         <label>Días máximos sin descarga de datos</label>
         <input type="number" id="cfgDesc" min="1">
         <div class="section-gap" style="height:10px"></div>
-        <label>Cambios de cinta antes de revisar mangueras</label>
-        <input type="number" id="cfgCinta" min="1">
-        <div class="section-gap" style="height:10px"></div>
         <label>Días entre mantenimientos preventivos</label>
         <input type="number" id="cfgMant" min="1">
         <div class="actions"><button class="btn primary" onclick="saveCfg()">Guardar</button></div>
@@ -200,8 +197,8 @@
     <div><label>Modelo</label><input id="dModelo" placeholder="RoadPod VT"></div>
     <div><label>Estado</label><select id="dEstado"><option>En uso</option><option>En bodega</option><option>En mantenimiento</option><option>Fuera de servicio</option></select></div>
     <div class="full"><label>Ubicación</label><input id="dUbic" placeholder="KM 152 CA-2, sentido ..."></div>
-    <div><label>Manguera A (ID)</label><input id="dMA" placeholder="Ej. A-03"></div>
-    <div><label>Manguera B (ID)</label><input id="dMB" placeholder="Ej. B-05"></div>
+    <div><label>Manguera A (cambios)</label><input type="number" min="0" id="dMA"></div>
+    <div><label>Manguera B (cambios)</label><input type="number" min="0" id="dMB"></div>
     <div><label>Cambios de cinta (instalación actual)</label><input type="number" id="dCinta" min="0"></div>
     <div><label>Fecha de instalación</label><input type="date" id="dInst"></div>
     <div><label>Última descarga de datos</label><input type="date" id="dDesc"></div>
@@ -222,8 +219,8 @@
     <div class="full" id="lUbicWrap"><label>Ubicación</label><input id="lUbic" placeholder="KM / sentido / carril"></div>
     <div class="full" id="lSetWrap"><div class="form-grid">
       <div class="full" id="lLadoWrap"><label>¿Qué manguera?</label><select id="lLado" onchange="logHint()"><option value="A">Solo A</option><option value="B">Solo B</option><option value="AB">Ambas (A y B)</option></select></div>
-      <div id="lMAWrap"><label>Nueva Manguera A (ID)</label><input id="lMA"></div>
-      <div id="lMBWrap"><label>Nueva Manguera B (ID)</label><input id="lMB"></div>
+      <div id="lMAWrap"><label>Manguera A (cambios)</label><input type="number" min="0" id="lMA"></div>
+      <div id="lMBWrap"><label>Manguera B (cambios)</label><input type="number" min="0" id="lMB"></div>
     </div></div>
     <div id="lStopWrap"><label>¿Se hizo STOP y SETUP?</label><select id="lStop" onchange="stopSetup()"><option value="">— Seleccionar —</option><option>Sí</option><option>No</option></select>
       <div class="hint">Si es Sí, la memoria se reinicia a 0%.</div></div>
@@ -280,11 +277,11 @@ const API_URL = 'https://script.google.com/macros/s/AKfycbzbEZd3k9_uOsnaa0XvOeI-
 const LS_KEY = 'xochi_metrocount_v1';
 const LS_API = 'xochi_metrocount_api';
 const TIPOS = {
-  'Instalación':            'Pone el equipo "En uso", actualiza ubicación y mangueras A y B, reinicia el conteo de cambios de cinta.',
+  'Instalación':            'Pone el equipo "En uso" y actualiza ubicación. Los contadores de mangueras y cinta se conservan como historial.',
   'Retiro':                 'Pasa el equipo a "En bodega".',
   'Descarga de datos':      'Actualiza la fecha de última descarga. Si se hizo STOP y SETUP, reinicia la memoria a 0%.',
   'Cambio de cinta':        'Suma 1 al conteo de cambios de cinta y cuenta como mantenimiento preventivo. No descuenta cinta asfáltica del inventario.',
-  'Cambio de manguera':     'Cambia la Manguera A, la B o ambas. Si cambian ambas, reinicia el conteo de cinta.',
+  'Cambio de manguera':     'Suma 1 al contador de la manguera cambiada (A, B o ambas) y quita la marca CAMBIAR.',
   'Cambio de batería':      'Registra el cambio de batería como mantenimiento.',
   'Inspección en campo':    'Registro de revisión visual (mangueras, clavos, figure 8, tapones).',
   'Mantenimiento preventivo':'Actualiza la fecha de último mantenimiento.',
@@ -442,7 +439,6 @@ function deviceAlerts(d){
     const ds = daysSince(d.ultimaDescarga);
     if(ds===null) a.push(['p-warn','Sin descarga de datos registrada']);
     else if(ds > c.diasDescarga) a.push(['p-bad',`${ds} días sin descargar datos`]);
-    if(+d.cambiosCinta >= c.cintaMax) a.push(['p-warn',`${d.cambiosCinta} cambios de cinta: revisar estado de mangueras`]);
   }
   const dm = daysSince(d.ultimoMant);
   if(dm===null) a.push(['p-info','Sin mantenimiento preventivo registrado']);
@@ -578,7 +574,7 @@ function renderBuy(){
 }
 
 function renderCfg(){
-  $('cfgDesc').value=S.config.diasDescarga; $('cfgCinta').value=S.config.cintaMax; $('cfgMant').value=S.config.diasMant; $('cfgApi').value=API;
+  $('cfgDesc').value=S.config.diasDescarga; $('cfgMant').value=S.config.diasMant; $('cfgApi').value=API;
 }
 
 /* ============ DEVICES ============ */
@@ -615,8 +611,8 @@ function logHint(){
   $('lSetWrap').style.display  = ['Instalación','Cambio de manguera'].includes(t)?'':'none';
   const lado = t==='Instalación' ? 'AB' : $('lLado').value;
   $('lLadoWrap').style.display = t==='Instalación'?'none':'';
-  $('lMAWrap').style.display = lado.includes('A')?'':'none';
-  $('lMBWrap').style.display = lado.includes('B')?'':'none';
+  $('lMAWrap').style.display = t==='Instalación'?'':'none';   // en Cambio de manguera el contador sube solo
+  $('lMBWrap').style.display = t==='Instalación'?'':'none';
   const dv=S.devices.find(x=>x.id===$('lDev').value);
   if(t==='Instalación' && dv){ if(!$('lMA').value) $('lMA').value=dv.mangueraA||''; if(!$('lMB').value) $('lMB').value=dv.mangueraB||''; }
   $('lBatWrap').style.display  = ['Descarga de datos','Mantenimiento preventivo','Inspección en campo'].includes(t)?'':'none';
@@ -641,8 +637,7 @@ function saveLog(e){
   try{ localStorage.setItem('xochi_mc_resp', l.responsable); }catch(e){}
   if(l.tipo==='Instalación' || l.tipo==='Cambio de manguera'){
     l.lado = l.tipo==='Instalación' ? 'AB' : $('lLado').value;
-    if(l.lado.includes('A')) l.mangueraA=$('lMA').value.trim();
-    if(l.lado.includes('B')) l.mangueraB=$('lMB').value.trim();
+    if(l.tipo==='Instalación'){ l.mangueraA=$('lMA').value.trim(); l.mangueraB=$('lMB').value.trim(); }
   }
   const d = S.devices.find(x=>x.id===l.dispositivo);
   if(!l.ubicacion && d) l.ubicacion = d.ubicacion;
@@ -661,14 +656,13 @@ function saveLog(e){
   // Efectos en el equipo
   const later = (a,b) => !a || b >= a;
   switch(l.tipo){
-    case 'Instalación': d.estado='En uso'; d.fechaInstalacion=l.fecha; d.cambiosCinta=0; d.cambiarA=''; d.cambiarB=''; d.cambiarCinta=''; if(l.ubicacion) d.ubicacion=l.ubicacion; if(l.mangueraA) d.mangueraA=l.mangueraA; if(l.mangueraB) d.mangueraB=l.mangueraB; break;
+    case 'Instalación': d.estado='En uso'; d.fechaInstalacion=l.fecha; d.cambiarA=''; d.cambiarB=''; d.cambiarCinta=''; if(l.ubicacion) d.ubicacion=l.ubicacion; if(l.mangueraA) d.mangueraA=l.mangueraA; if(l.mangueraB) d.mangueraB=l.mangueraB; break;
     case 'Retiro': d.estado='En bodega'; break;
     case 'Descarga de datos': if(later(d.ultimaDescarga,l.fecha)) d.ultimaDescarga=l.fecha; break;
     case 'Cambio de cinta': d.cambiarCinta=''; d.cambiosCinta=(+d.cambiosCinta||0)+1; if(later(d.ultimoMant,l.fecha)) d.ultimoMant=l.fecha; break;
     case 'Cambio de manguera':
-      if(l.lado.includes('A')){ d.cambiarA=''; if(l.mangueraA) d.mangueraA=l.mangueraA; }
-      if(l.lado.includes('B')){ d.cambiarB=''; if(l.mangueraB) d.mangueraB=l.mangueraB; }
-      if(l.lado==='AB') d.cambiosCinta=0;
+      if(l.lado.includes('A')){ d.cambiarA=''; d.mangueraA=String((parseInt(d.mangueraA)||0)+1); l.mangueraA=d.mangueraA; }
+      if(l.lado.includes('B')){ d.cambiarB=''; d.mangueraB=String((parseInt(d.mangueraB)||0)+1); l.mangueraB=d.mangueraB; }
       break;
     case 'Cambio de batería': if(later(d.ultimoMant,l.fecha)) d.ultimoMant=l.fecha; break;
     case 'Mantenimiento preventivo': if(later(d.ultimoMant,l.fecha)) d.ultimoMant=l.fecha; if(d.estado==='En mantenimiento') d.estado='En bodega'; break;
@@ -745,7 +739,7 @@ function delBuy(){
 function skipAuto(b){ const i=S.inventario.find(x=>x.id===b.itemId); if(i) i.autoSkip=1; }
 
 /* ============ SETTINGS / EXPORT ============ */
-function saveCfg(){ S.config={...S.config, diasDescarga:+$('cfgDesc').value||7, cintaMax:+$('cfgCinta').value||5, diasMant:+$('cfgMant').value||90}; persist(); alert('Ajustes guardados'); }
+function saveCfg(){ S.config={...S.config, diasDescarga:+$('cfgDesc').value||7, diasMant:+$('cfgMant').value||90}; persist(); alert('Ajustes guardados'); }
 function saveApi(){ API=$('cfgApi').value.trim() || API_URL; try{ if($('cfgApi').value.trim()) localStorage.setItem(LS_API,API); else localStorage.removeItem(LS_API); }catch(e){} if(API) pull(); else setSync('','Local'); }
 function download(name, content, type){ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([content],{type})); a.download=name; a.click(); }
 function exportJSON(){ download(`metrocount_respaldo_${today()}.json`, JSON.stringify(S,null,2), 'application/json'); }
